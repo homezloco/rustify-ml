@@ -3,7 +3,7 @@ use std::process::Command;
 use anyhow::{Context, Result, anyhow};
 use tracing::{info, warn};
 
-use crate::utils::GenerationResult;
+use crate::utils::{GenerationResult, InputSource, TargetSpec, extract_code};
 
 /// Run `cargo check` on the generated crate to catch translation errors early.
 /// Returns Ok(()) if the check passes, or an error with the compiler output.
@@ -69,4 +69,122 @@ pub fn build_extension(r#gen: &GenerationResult, dry_run: bool) -> Result<()> {
         "maturin build completed"
     );
     Ok(())
+}
+
+/// Run a Python timing harness comparing the original Python function against the
+/// generated Rust extension. Prints a speedup table to stdout.
+///
+/// Requires: maturin develop already run (extension importable), Python on PATH.
+pub fn run_benchmark(
+    source: &InputSource,
+    result: &GenerationResult,
+    targets: &[TargetSpec],
+) -> Result<()> {
+    use crate::profiler::detect_python;
+
+    let python = detect_python()?;
+    let code = extract_code(source)?;
+    let module_name = result
+        .crate_dir
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("rustify_ml_ext");
+
+    // Build a self-contained Python benchmark script
+    let func_names: Vec<String> = targets
+        .iter()
+        .filter(|t| {
+            // Only benchmark functions that were fully translated (no fallback)
+            result
+                .generated_functions
+                .iter()
+                .any(|f| f.contains(&format!("pub fn {}", t.func)) && !f.contains("// fallback"))
+        })
+        .map(|t| t.func.clone())
+        .collect();
+
+    if func_names.is_empty() {
+        warn!("no fully-translated functions to benchmark; skipping");
+        return Ok(());
+    }
+
+    let harness = build_benchmark_harness(&code, module_name, &func_names);
+
+    let output = Command::new(&python)
+        .args(["-c", &harness])
+        .output()
+        .with_context(|| format!("failed to run {} for benchmark", python))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(anyhow!("benchmark harness failed: {}", stderr.trim()));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    println!("\n{}", stdout.trim());
+    Ok(())
+}
+
+/// Generate a Python benchmark script that times original vs Rust for each function.
+fn build_benchmark_harness(code: &str, module_name: &str, func_names: &[String]) -> String {
+    let escaped_code = code.replace('\\', "\\\\").replace('"', "\\\"");
+    let funcs_list = func_names
+        .iter()
+        .map(|f| format!("\"{}\"", f))
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    format!(
+        r#"
+import timeit, sys, importlib, types
+
+# --- original Python code ---
+_src = """{code}"""
+_mod = types.ModuleType("_orig")
+exec(compile(_src, "<rustify_bench>", "exec"), _mod.__dict__)
+
+# --- accelerated Rust extension ---
+try:
+    _ext = importlib.import_module("{module}")
+except ImportError as e:
+    print(f"Could not import {module}: {{e}}")
+    sys.exit(1)
+
+_funcs = [{funcs}]
+_iters = 1000
+
+print()
+print(f"{{'':-<60}}")
+print(f"  rustify-ml benchmark  ({{_iters}} iterations each)")
+print(f"{{'':-<60}}")
+print(f"  {{\"Function\":<22}} | {{\"Python\":>10}} | {{\"Rust\":>10}} | {{\"Speedup\":>8}}")
+print(f"  {{'':-<22}}-+-{{'':-<10}}-+-{{'':-<10}}-+-{{'':-<8}}")
+
+for fn_name in _funcs:
+    py_fn = getattr(_mod, fn_name, None)
+    rs_fn = getattr(_ext, fn_name, None)
+    if py_fn is None or rs_fn is None:
+        print(f"  {{fn_name:<22}} | skipped (not found)")
+        continue
+    # Build a simple call with dummy float vectors
+    try:
+        import inspect
+        sig = inspect.signature(py_fn)
+        n_params = len(sig.parameters)
+        dummy = [float(i) for i in range(100)]
+        args = tuple(dummy for _ in range(n_params))
+        py_time = timeit.timeit(lambda: py_fn(*args), number=_iters)
+        rs_time = timeit.timeit(lambda: rs_fn(*args), number=_iters)
+        speedup = py_time / rs_time if rs_time > 0 else float("inf")
+        print(f"  {{fn_name:<22}} | {{py_time:>9.4f}}s | {{rs_time:>9.4f}}s | {{speedup:>7.1f}}x")
+    except Exception as e:
+        print(f"  {{fn_name:<22}} | error: {{e}}")
+
+print(f"{{'':-<60}}")
+print()
+"#,
+        code = escaped_code,
+        module = module_name,
+        funcs = funcs_list,
+    )
 }

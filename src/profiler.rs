@@ -107,14 +107,14 @@ for (fname, line, func), stat in stats.stats.items():
                     continue;
                 }
                 let mut parts = rest.rsplitn(2, ':');
-                if let (Some(line_part), Some(func_part)) = (parts.next(), parts.next()) {
-                    if let Ok(line_no) = line_part.parse::<u32>() {
-                        hotspots.push(Hotspot {
-                            func: func_part.trim().to_string(),
-                            line: line_no,
-                            percent,
-                        });
-                    }
+                if let (Some(line_part), Some(func_part)) = (parts.next(), parts.next())
+                    && let Ok(line_no) = line_part.parse::<u32>()
+                {
+                    hotspots.push(Hotspot {
+                        func: func_part.trim().to_string(),
+                        line: line_no,
+                        percent,
+                    });
                 }
             }
         }

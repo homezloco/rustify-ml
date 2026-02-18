@@ -205,54 +205,61 @@ struct BodyTranslation {
 }
 
 fn translate_body(body: &[Stmt]) -> Option<BodyTranslation> {
+    translate_body_inner(body, 1)
+}
+
+/// Recursive body translator. `depth` tracks nesting level for indentation.
+fn translate_body_inner(body: &[Stmt], depth: usize) -> Option<BodyTranslation> {
     if body.is_empty() {
         return None;
     }
 
-    // Handle simple single-statement for loop with accumulation
-    if let Stmt::For(for_stmt) = &body[0] {
-        if let Expr::Call(call) = for_stmt.iter.as_ref() {
-            if let Expr::Name(func) = call.func.as_ref() {
-                if func.id.as_str() == "range" && call.args.len() == 1 {
-                    let iter_expr = expr_to_rust(&call.args[0]);
-                    let loop_var = if let Expr::Name(n) = for_stmt.target.as_ref() {
-                        n.id.to_string()
-                    } else {
-                        "i".to_string()
-                    };
+    let indent = "    ".repeat(depth);
 
-                    let translated_loop_body = translate_body(for_stmt.body.as_slice())
-                        .map(|b| b.body)
-                        .unwrap_or_else(|| {
-                            format!(
-                                "// TODO: translate loop body\n        total += ({loop_var} as f64) * ({loop_var} as f64);"
-                            )
-                        });
+    // Handle simple single-statement for loop with accumulation (depth==1 only)
+    if depth == 1
+        && let Stmt::For(for_stmt) = &body[0]
+        && let Expr::Call(call) = for_stmt.iter.as_ref()
+        && let Expr::Name(func) = call.func.as_ref()
+        && func.id.as_str() == "range"
+        && call.args.len() == 1
+    {
+        let iter_expr = expr_to_rust(&call.args[0]);
+        let loop_var = if let Expr::Name(n) = for_stmt.target.as_ref() {
+            n.id.to_string()
+        } else {
+            "i".to_string()
+        };
 
-                    let body = format!(
-                        "let mut total = 0.0f64;\n    for {loop_var} in 0..{iter} {{\n        {translated_loop_body}\n    }}\n    Ok(total)",
-                        loop_var = loop_var,
-                        iter = iter_expr,
-                        translated_loop_body = translated_loop_body
-                    );
+        let translated_loop_body = translate_body_inner(for_stmt.body.as_slice(), depth + 1)
+            .map(|b| b.body)
+            .unwrap_or_else(|| {
+                format!(
+                    "// TODO: translate loop body\n        total += ({loop_var} as f64) * ({loop_var} as f64);"
+                )
+            });
 
-                    return Some(BodyTranslation {
-                        return_type: "f64".to_string(),
-                        body,
-                        fallback: false,
-                    });
-                }
-            }
-        }
+        let body = format!(
+            "let mut total = 0.0f64;\n    for {loop_var} in 0..{iter} {{\n        {translated_loop_body}\n    }}\n    Ok(total)",
+            loop_var = loop_var,
+            iter = iter_expr,
+            translated_loop_body = translated_loop_body
+        );
+
+        return Some(BodyTranslation {
+            return_type: "f64".to_string(),
+            body,
+            fallback: false,
+        });
     }
 
     // Generic translation of sequential statements
     let mut out = String::new();
     let mut had_unhandled = false;
     for stmt in body {
-        match translate_stmt(stmt) {
+        match translate_stmt_inner(stmt, depth) {
             Some(line) => {
-                out.push_str("    ");
+                out.push_str(&indent);
                 out.push_str(&line);
                 if !line.ends_with('\n') {
                     out.push('\n');
@@ -260,13 +267,16 @@ fn translate_body(body: &[Stmt]) -> Option<BodyTranslation> {
             }
             None => {
                 had_unhandled = true;
-                out.push_str("    // Unhandled stmt: ");
-                out.push_str(&format!("{:?}\n", stmt));
+                out.push_str(&indent);
+                out.push_str("// Unhandled stmt\n");
             }
         }
     }
 
-    out.push_str("    Ok(total)");
+    // Only append Ok(total) at top level; inner bodies just return their statements
+    if depth == 1 {
+        out.push_str("    Ok(total)");
+    }
 
     Some(BodyTranslation {
         return_type: "f64".to_string(),
@@ -275,7 +285,8 @@ fn translate_body(body: &[Stmt]) -> Option<BodyTranslation> {
     })
 }
 
-fn translate_stmt(stmt: &Stmt) -> Option<String> {
+/// Depth-aware version of translate_stmt used by translate_body_inner.
+fn translate_stmt_inner(stmt: &Stmt, depth: usize) -> Option<String> {
     match stmt {
         Stmt::Assign(assign) => {
             if let (Some(target), value) = (assign.targets.first(), &assign.value) {
@@ -285,38 +296,32 @@ fn translate_stmt(stmt: &Stmt) -> Option<String> {
                     let rhs = expr_to_rust(value);
                     return Some(format!("{} = {};", lhs, rhs));
                 }
-
                 // List init: result = [0.0] * n  →  let mut result = vec![0.0f64; n];
-                if let Expr::BinOp(binop) = value.as_ref() {
-                    if matches!(binop.op, Operator::Mult) {
-                        if let Expr::List(lst) = binop.left.as_ref() {
-                            if lst.elts.len() == 1 {
-                                let fill = expr_to_rust(&lst.elts[0]);
-                                let size = expr_to_rust(&binop.right);
-                                let var_name = match target {
-                                    Expr::Name(n) => n.id.to_string(),
-                                    _ => "result".to_string(),
-                                };
-                                // Determine fill type suffix
-                                let fill_rust = if fill.contains('.') {
-                                    format!("{}f64", fill)
-                                } else {
-                                    fill.clone()
-                                };
-                                return Some(format!(
-                                    "let mut {var} = vec![{fill}; {size}];",
-                                    var = var_name,
-                                    fill = fill_rust,
-                                    size = size
-                                ));
-                            }
-                        }
-                    }
+                if let Expr::BinOp(binop) = value.as_ref()
+                    && matches!(binop.op, Operator::Mult)
+                    && let Expr::List(lst) = binop.left.as_ref()
+                    && lst.elts.len() == 1
+                {
+                    let fill = expr_to_rust(&lst.elts[0]);
+                    let size = expr_to_rust(&binop.right);
+                    let var_name = match target {
+                        Expr::Name(n) => n.id.to_string(),
+                        _ => "result".to_string(),
+                    };
+                    let fill_rust = if fill.contains('.') {
+                        format!("{}f64", fill)
+                    } else {
+                        fill.clone()
+                    };
+                    return Some(format!(
+                        "let mut {var} = vec![{fill}; {size}];",
+                        var = var_name,
+                        fill = fill_rust,
+                        size = size
+                    ));
                 }
-
                 let lhs = match target {
                     Expr::Name(n) => {
-                        // Infer type suffix for float/int literals
                         let type_suffix = infer_assign_type(value);
                         format!("let mut {}{}", n.id, type_suffix)
                     }
@@ -329,45 +334,18 @@ fn translate_stmt(stmt: &Stmt) -> Option<String> {
             None
         }
         Stmt::For(for_stmt) => {
-            // Detect range(n) or range(len(x)) for loop
             let iter_str = translate_for_iter(&for_stmt.iter);
             let loop_var = expr_to_rust(&for_stmt.target);
-            let loop_body = translate_body(for_stmt.body.as_slice())
+            let inner = translate_body_inner(for_stmt.body.as_slice(), depth + 1);
+            let loop_body = inner
                 .map(|b| b.body)
                 .unwrap_or_else(|| "    // unhandled loop body".to_string());
             Some(format!(
-                "for {loop_var} in {iter_str} {{\n{loop_body}\n    }}",
+                "for {loop_var} in {iter_str} {{\n{loop_body}\n{indent}}}",
                 loop_var = loop_var,
                 iter_str = iter_str,
-                loop_body = indent_block(&loop_body, 4)
-            ))
-        }
-        Stmt::If(if_stmt) => {
-            if let Some(guard) = translate_len_guard(&if_stmt.test) {
-                return Some(guard);
-            }
-
-            let test = expr_to_rust(&if_stmt.test);
-            let body = translate_body(if_stmt.body.as_slice())
-                .map(|b| b.body)
-                .unwrap_or_else(|| "// unhandled if body".to_string());
-            let orelse = if !if_stmt.orelse.is_empty() {
-                translate_body(if_stmt.orelse.as_slice())
-                    .map(|b| b.body)
-                    .unwrap_or_else(|| "// unhandled else body".to_string())
-            } else {
-                String::new()
-            };
-            let else_block = if orelse.is_empty() {
-                String::new()
-            } else {
-                format!("else {{\n{}\n    }}", indent_block(&orelse, 4))
-            };
-            Some(format!(
-                "if {test} {{\n{body_block}\n    }} {else_block}",
-                test = test,
-                body_block = indent_block(&body, 4),
-                else_block = else_block
+                loop_body = loop_body,
+                indent = "    ".repeat(depth)
             ))
         }
         Stmt::AugAssign(aug) => {
@@ -389,8 +367,41 @@ fn translate_stmt(stmt: &Stmt) -> Option<String> {
                 Some("return ();".to_string())
             }
         }
+        Stmt::If(if_stmt) => {
+            if let Some(guard) = translate_len_guard(&if_stmt.test) {
+                return Some(guard);
+            }
+            let test = expr_to_rust(&if_stmt.test);
+            let body = translate_body_inner(if_stmt.body.as_slice(), depth + 1)
+                .map(|b| b.body)
+                .unwrap_or_else(|| "// unhandled if body".to_string());
+            let orelse = if !if_stmt.orelse.is_empty() {
+                translate_body_inner(if_stmt.orelse.as_slice(), depth + 1)
+                    .map(|b| b.body)
+                    .unwrap_or_else(|| "// unhandled else body".to_string())
+            } else {
+                String::new()
+            };
+            let else_block = if orelse.is_empty() {
+                String::new()
+            } else {
+                format!(" else {{\n{}\n{}}}", orelse, "    ".repeat(depth))
+            };
+            Some(format!(
+                "if {test} {{\n{body}\n{indent}}}{else_block}",
+                test = test,
+                body = body,
+                indent = "    ".repeat(depth),
+                else_block = else_block
+            ))
+        }
         _ => None,
     }
+}
+
+#[allow(dead_code)]
+fn translate_stmt(stmt: &Stmt) -> Option<String> {
+    translate_stmt_inner(stmt, 1)
 }
 
 /// Infer a Rust type annotation suffix for a simple assignment RHS.
@@ -409,21 +420,20 @@ fn infer_assign_type(value: &Expr) -> &'static str {
 /// Translate a Python for-loop iterator expression to a Rust range string.
 /// Handles: range(n), range(len(x)), and falls back to expr_to_rust.
 fn translate_for_iter(iter: &Expr) -> String {
-    if let Expr::Call(call) = iter {
-        if let Expr::Name(func) = call.func.as_ref() {
-            if func.id.as_str() == "range" {
-                match call.args.len() {
-                    1 => return format!("0..{}", expr_to_rust(&call.args[0])),
-                    2 => {
-                        return format!(
-                            "{}..{}",
-                            expr_to_rust(&call.args[0]),
-                            expr_to_rust(&call.args[1])
-                        );
-                    }
-                    _ => {}
-                }
+    if let Expr::Call(call) = iter
+        && let Expr::Name(func) = call.func.as_ref()
+        && func.id.as_str() == "range"
+    {
+        match call.args.len() {
+            1 => return format!("0..{}", expr_to_rust(&call.args[0])),
+            2 => {
+                return format!(
+                    "{}..{}",
+                    expr_to_rust(&call.args[0]),
+                    expr_to_rust(&call.args[1])
+                );
             }
+            _ => {}
         }
     }
     expr_to_rust(iter)
@@ -541,6 +551,7 @@ fn constant_to_rust(value: &rustpython_parser::ast::Constant) -> String {
     }
 }
 
+#[allow(dead_code)]
 fn indent_block(body: &str, spaces: usize) -> String {
     let pad = " ".repeat(spaces);
     body.lines()
@@ -776,6 +787,52 @@ def normalize_pixels(pixels, mean, std):
         assert!(
             translation.body.contains("vec![") || translation.body.contains("result["),
             "expected vec! or subscript in body, got: {}",
+            translation.body
+        );
+    }
+
+    #[test]
+    fn test_translate_matmul_nested_loops() {
+        // matmul: result=[0.0]*(n*n), for i in range(n): for j in range(n): total=0.0; for k in range(n): total+=...; result[i*n+j]=total
+        let code = r#"
+def matmul(a, b, n):
+    result = [0.0] * (n * n)
+    for i in range(n):
+        for j in range(n):
+            total = 0.0
+            for k in range(n):
+                total += a[i * n + k] * b[k * n + j]
+            result[i * n + j] = total
+    return result
+"#;
+        let suite = Suite::parse(code, "<test>").expect("parse failed");
+        let stmts: &[Stmt] = suite.as_slice();
+        let target = TargetSpec {
+            func: "matmul".to_string(),
+            line: 1,
+            percent: 100.0,
+            reason: "test".to_string(),
+        };
+        let translation = translate_function_body(&target, stmts).expect("no translation");
+        // Nested for loops should be translated (not fallback)
+        assert!(
+            translation.body.contains("for i in 0..n"),
+            "expected outer for i in 0..n, got: {}",
+            translation.body
+        );
+        assert!(
+            translation.body.contains("for j in 0..n"),
+            "expected inner for j in 0..n, got: {}",
+            translation.body
+        );
+        assert!(
+            translation.body.contains("for k in 0..n"),
+            "expected innermost for k in 0..n, got: {}",
+            translation.body
+        );
+        assert!(
+            translation.body.contains("vec!["),
+            "expected vec! init for result, got: {}",
             translation.body
         );
     }

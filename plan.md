@@ -14,8 +14,8 @@
 | src/utils.rs | ✅ Done | InputSource, Hotspot, ProfileSummary, TargetSpec, GenerationResult, AccelerateRow, print_summary |
 | src/profiler.rs | ✅ Done | cProfile harness; detect_python (python3→python); version pre-flight; stdlib filter |
 | src/analyzer.rs | ✅ Done | Hotspot threshold filter; ml_mode reason tagging |
-| src/generator.rs | ✅ Done | AST walk; assign init; subscript assign; list init; range(a,b); infer_assign_type; translate_for_iter; constant_to_rust; len-check guards; fallback tracking |
-| src/builder.rs | ✅ Done | cargo_check_generated (fast-fail); maturin develop subprocess |
+| src/generator.rs | ✅ Done | AST walk; assign init; subscript assign; list init; range(a,b); nested for loops (translate_body_inner depth-aware); infer_assign_type; translate_for_iter; fallback tracking |
+| src/builder.rs | ✅ Done | cargo_check_generated (fast-fail); maturin develop; run_benchmark (Python timing harness; speedup table) |
 | Cargo.toml | ✅ Done | lib + bin targets; all deps; optional ndarray/tch features |
 | tests/integration.rs | ✅ Done | 8 integration tests for generate() pipeline |
 | tests/integration_cli.rs | ✅ Done | 3 CLI end-to-end tests (dry-run; python_available guard) |
@@ -59,8 +59,9 @@ CLI args (Clap)
 - [x] Add unit tests: float_assign_init, subscript_assign, list_init, range_two_args, normalize_pixels
 - [x] Achieve 0 fallbacks on `examples/euclidean.py`
 - [ ] Verify 0 fallbacks on `dot_product` in `matrix_ops.py` (run `cargo test`)
-- [ ] Translate nested for loops: `for i in range(n): for j in range(n):` → nested for (matmul)
-- [ ] Achieve 0 or graceful partial fallback on `matmul` (nested loops)
+- [x] Translate nested for loops: `for i in range(n): for j in range(n):` → nested for (translate_body_inner depth-aware recursion)
+- [x] Add matmul nested-loop unit test (test_translate_matmul_nested_loops)
+- [ ] Verify matmul generates 0 fallbacks end-to-end (run `cargo test`)
 
 ### Task 2 (HIGH): More Unit Tests
 - [ ] Add snapshot test: assert generated lib.rs matches expected golden file

@@ -102,8 +102,8 @@ pub fn print_summary(rows: &[AccelerateRow], crate_dir: &std::path::Path) {
     );
     println!();
     println!(
-        "{:<22} | {:>4} | {:>6} | {:<11} | {}",
-        "Func", "Line", "% Time", "Translation", "Status"
+        "{:<22} | {:>4} | {:>6} | {:<11} | Status",
+        "Func", "Line", "% Time", "Translation"
     );
     println!("{}", "-".repeat(22 + 3 + 4 + 3 + 6 + 3 + 11 + 3 + 20));
     for row in rows {

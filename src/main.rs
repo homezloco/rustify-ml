@@ -51,6 +51,9 @@ enum Commands {
         /// Print planned actions without executing
         #[arg(long, default_value_t = false)]
         dry_run: bool,
+        /// After building, run a Python timing harness and print speedup vs original
+        #[arg(long, default_value_t = false)]
+        benchmark: bool,
     },
 }
 
@@ -83,6 +86,7 @@ fn main() -> Result<()> {
             output,
             ml_mode,
             dry_run,
+            benchmark,
         } => {
             info!(
                 ?file,
@@ -93,6 +97,7 @@ fn main() -> Result<()> {
                 ?output,
                 ml_mode,
                 dry_run,
+                benchmark,
                 "starting accelerate"
             );
             let source = input::load_input(
@@ -112,6 +117,13 @@ fn main() -> Result<()> {
             let targets = analyzer::select_targets(&profile, threshold, ml_mode);
             let generation = generator::generate(&source, &targets, &output, dry_run)?;
             builder::build_extension(&generation, dry_run)?;
+
+            // Optional benchmark: run Python timing harness and print speedup
+            if benchmark && !dry_run {
+                if let Err(e) = builder::run_benchmark(&source, &generation, &targets) {
+                    warn!(err = %e, "benchmark failed; skipping speedup output");
+                }
+            }
 
             // Build summary rows from targets + generation result
             let summary_rows: Vec<utils::AccelerateRow> = targets
