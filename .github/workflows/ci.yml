@@ -15,10 +15,6 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
 
-    defaults:
-      run:
-        working-directory: rustify-ml
-
     steps:
       - uses: actions/checkout@v4
 
@@ -33,8 +29,8 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            rustify-ml/target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('rustify-ml/Cargo.lock') }}
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
 
       - name: Set up Python
