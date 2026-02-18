@@ -1,0 +1,113 @@
+mod analyzer;
+mod builder;
+mod generator;
+mod input;
+mod profiler;
+mod utils;
+
+use anyhow::Result;
+use clap::{Parser, Subcommand};
+use tracing::info;
+
+#[derive(Parser, Debug)]
+#[command(
+    name = "rustify-ml",
+    about = "Accelerate Python ML hotspots with Rust stubs",
+    version
+)]
+struct Args {
+    #[command(subcommand)]
+    command: Commands,
+    /// Increase verbosity (-v, -vv)
+    #[arg(short, long, action = clap::ArgAction::Count, global = true)]
+    verbose: u8,
+}
+
+#[derive(Subcommand, Debug)]
+enum Commands {
+    /// Profile and generate Rust bindings for Python code
+    Accelerate {
+        /// Path to a Python file to analyze
+        #[arg(long)]
+        file: Option<std::path::PathBuf>,
+        /// Read Python code from stdin
+        #[arg(long, default_value_t = false)]
+        snippet: bool,
+        /// Git repository URL to clone and analyze (optional)
+        #[arg(long)]
+        git: Option<String>,
+        /// Minimum hotspot threshold percentage
+        #[arg(long, default_value_t = 10.0)]
+        threshold: f32,
+        /// Output directory for generated extension
+        #[arg(long, default_value = "dist")]
+        output: std::path::PathBuf,
+        /// Enable ML-focused heuristics
+        #[arg(long, default_value_t = false)]
+        ml_mode: bool,
+        /// Print planned actions without executing
+        #[arg(long, default_value_t = false)]
+        dry_run: bool,
+    },
+}
+
+fn init_tracing(verbosity: u8) {
+    let level = match verbosity {
+        0 => "info",
+        1 => "debug",
+        _ => "trace",
+    };
+
+    let subscriber = tracing_subscriber::FmtSubscriber::builder()
+        .with_env_filter(level)
+        .with_writer(std::io::stderr)
+        .finish();
+
+    let _ = tracing::subscriber::set_global_default(subscriber);
+}
+
+fn main() -> Result<()> {
+    let args = Args::parse();
+    init_tracing(args.verbose);
+
+    match args.command {
+        Commands::Accelerate {
+            file,
+            snippet,
+            git,
+            threshold,
+            output,
+            ml_mode,
+            dry_run,
+        } => {
+            info!(
+                ?file,
+                snippet,
+                ?git,
+                threshold,
+                ?output,
+                ml_mode,
+                dry_run,
+                "starting accelerate"
+            );
+            let source = input::load_input(file.as_deref(), snippet, git.as_deref())?;
+            let input_kind = match &source {
+                crate::utils::InputSource::File { path, .. } => format!("file:{}", path.display()),
+                crate::utils::InputSource::Snippet(_) => "snippet:stdin".to_string(),
+                crate::utils::InputSource::GitPlaceholder(repo) => format!("git:{}", repo),
+            };
+            let profile = profiler::profile_input(&source, threshold)?;
+            let targets = analyzer::select_targets(&profile, threshold, ml_mode);
+            let generation = generator::generate(&source, &targets, &output, dry_run)?;
+            builder::build_extension(&generation, dry_run)?;
+            info!(
+                input_kind,
+                targets = targets.len(),
+                generated = generation.generated_functions.len(),
+                "accelerate flow completed"
+            );
+        }
+    }
+
+    Ok(())
+}
