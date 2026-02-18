@@ -10,10 +10,10 @@ use crate::utils::{Hotspot, InputSource, ProfileSummary};
 /// Returns an error if neither is found.
 pub fn detect_python() -> Result<String> {
     for candidate in &["python3", "python"] {
-        if let Ok(output) = Command::new(candidate).arg("--version").output() {
-            if output.status.success() {
-                return Ok(candidate.to_string());
-            }
+        if let Ok(output) = Command::new(candidate).arg("--version").output()
+            && output.status.success()
+        {
+            return Ok(candidate.to_string());
         }
     }
     Err(anyhow!(
@@ -100,22 +100,22 @@ for (fname, line, func), stat in stats.stats.items():
     let mut hotspots = Vec::new();
     for line in stdout.lines() {
         // expected line: "pct% func file:line"
-        if let Some((percent_part, rest)) = line.split_once(' ') {
-            if let Ok(percent) = percent_part.trim().trim_end_matches('%').parse::<f32>() {
-                // Skip built-in and internal Python frames
-                if rest.contains("<built-in") || rest.contains("<frozen") {
-                    continue;
-                }
-                let mut parts = rest.rsplitn(2, ':');
-                if let (Some(line_part), Some(func_part)) = (parts.next(), parts.next())
-                    && let Ok(line_no) = line_part.parse::<u32>()
-                {
-                    hotspots.push(Hotspot {
-                        func: func_part.trim().to_string(),
-                        line: line_no,
-                        percent,
-                    });
-                }
+        if let Some((percent_part, rest)) = line.split_once(' ')
+            && let Ok(percent) = percent_part.trim().trim_end_matches('%').parse::<f32>()
+        {
+            // Skip built-in and internal Python frames
+            if rest.contains("<built-in") || rest.contains("<frozen") {
+                continue;
+            }
+            let mut parts = rest.rsplitn(2, ':');
+            if let (Some(line_part), Some(func_part)) = (parts.next(), parts.next())
+                && let Ok(line_no) = line_part.parse::<u32>()
+            {
+                hotspots.push(Hotspot {
+                    func: func_part.trim().to_string(),
+                    line: line_no,
+                    percent,
+                });
             }
         }
     }

@@ -146,34 +146,34 @@ fn translate_function_body(target: &TargetSpec, module: &[Stmt]) -> Option<Trans
     }
 
     // Simple heuristic: if first statement is a return of a name or number, mirror it.
-    if let Some(Stmt::Return(ret)) = func_def.body.first() {
-        if let Some(expr) = &ret.value {
-            match expr.as_ref() {
-                Expr::Name(name) => {
-                    return Some(Translation {
-                        params,
-                        return_type: "Vec<f64>".to_string(),
-                        body: format!(
-                            "// returning input name `{}` as-is\n    Ok({})",
-                            name.id, name.id
-                        ),
-                        fallback: false,
-                    });
-                }
-                Expr::Constant(c) => {
-                    return Some(Translation {
-                        params,
-                        return_type: "f64".to_string(),
-                        body: format!(
-                            "// returning constant from Python: {:?}\n    Ok({})",
-                            c.value,
-                            expr_to_rust(expr)
-                        ),
-                        fallback: false,
-                    });
-                }
-                _ => {}
+    if let Some(Stmt::Return(ret)) = func_def.body.first()
+        && let Some(expr) = &ret.value
+    {
+        match expr.as_ref() {
+            Expr::Name(name) => {
+                return Some(Translation {
+                    params,
+                    return_type: "Vec<f64>".to_string(),
+                    body: format!(
+                        "// returning input name `{}` as-is\n    Ok({})",
+                        name.id, name.id
+                    ),
+                    fallback: false,
+                });
             }
+            Expr::Constant(c) => {
+                return Some(Translation {
+                    params,
+                    return_type: "f64".to_string(),
+                    body: format!(
+                        "// returning constant from Python: {:?}\n    Ok({})",
+                        c.value,
+                        expr_to_rust(expr)
+                    ),
+                    fallback: false,
+                });
+            }
+            _ => {}
         }
     }
 
@@ -511,21 +511,22 @@ fn expr_to_rust(expr: &Expr) -> String {
 }
 
 fn translate_len_guard(test: &Expr) -> Option<String> {
-    if let Expr::Compare(comp) = test {
-        if comp.ops.len() == 1 && comp.comparators.len() == 1 {
-            let op = &comp.ops[0];
-            let left = expr_to_rust(&comp.left);
-            let right = expr_to_rust(&comp.comparators[0]);
-            let cond = match op {
-                CmpOp::Eq => format!("{left} == {right}"),
-                CmpOp::NotEq => format!("{left} != {right}"),
-                _ => return None,
-            };
-            return Some(format!(
-                "if {cond} {{\n        return Err(pyo3::exceptions::PyValueError::new_err(\"Vectors must be same length\"));\n    }}",
-                cond = cond
-            ));
-        }
+    if let Expr::Compare(comp) = test
+        && comp.ops.len() == 1
+        && comp.comparators.len() == 1
+    {
+        let op = &comp.ops[0];
+        let left = expr_to_rust(&comp.left);
+        let right = expr_to_rust(&comp.comparators[0]);
+        let cond = match op {
+            CmpOp::Eq => format!("{left} == {right}"),
+            CmpOp::NotEq => format!("{left} != {right}"),
+            _ => return None,
+        };
+        return Some(format!(
+            "if {cond} {{\n        return Err(pyo3::exceptions::PyValueError::new_err(\"Vectors must be same length\"));\n    }}",
+            cond = cond
+        ));
     }
     None
 }
