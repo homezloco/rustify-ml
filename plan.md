@@ -82,11 +82,12 @@ CLI args (Clap)
 - [x] Filter `<built-in>` and `<frozen>` frames from hotspot list
 - [ ] Add `--profile-only` flag: run profiler, print hotspots, exit
 
-### Task 5 (MEDIUM): ndarray Optional Feature
-- [ ] Trigger on `uses_numpy=true` AND param is `Vec<f64>` from np annotation
-- [ ] Generated signature: `PyReadonlyArray1<f64>` when ndarray feature active
-- [ ] Add ndarray to generated Cargo.toml when feature active
-- [ ] Add test: normalize_pixels with `--features numpy-hint` generates Array1 params
+### Task 5 (MEDIUM): ndarray Optional Feature ✅
+- [x] Trigger on `uses_numpy=true` (detects_numpy() checks import numpy/from numpy/import np)
+- [x] Generated signature: `PyReadonlyArray1<f64>` when ml_mode + numpy detected
+- [x] Add numpy dep to generated Cargo.toml when feature active
+- [x] `generate_ml()` public API; `--ml-mode` flag wires into main.rs
+- [x] Tests: test_ndarray_mode_replaces_vec_params, test_ndarray_mode_no_numpy_import_stays_vec
 
 ### Task 6 (LOW): README + Demo
 - [x] Full README with usage, CLI ref, translation table, architecture, roadmap
