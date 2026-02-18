@@ -126,6 +126,17 @@ fn main() -> Result<()> {
                 fallback_functions = generation.fallback_functions,
                 "accelerate flow completed"
             );
+            if !dry_run {
+                info!(
+                    install_hint = format!(
+                        "Generated crate at {}. Run `maturin develop --release` if not already installed.",
+                        output.display()
+                    ),
+                    "installation hint"
+                );
+            } else {
+                info!("dry-run completed; no install performed");
+            }
         }
     }
 

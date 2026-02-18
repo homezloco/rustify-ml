@@ -4,7 +4,7 @@ use std::path::Path;
 use anyhow::{Context, Result, anyhow};
 use heck::ToSnakeCase;
 use rustpython_parser::Parse;
-use rustpython_parser::ast::{Expr, Operator, Stmt, Suite};
+use rustpython_parser::ast::{Cmpop, Expr, Operator, Stmt, Suite};
 use tracing::{info, warn};
 
 use crate::utils::{GenerationResult, InputSource, TargetSpec, extract_code};
@@ -250,6 +250,7 @@ fn translate_body(body: &[Stmt]) -> Option<BodyTranslation> {
 
     // Generic translation of sequential statements
     let mut out = String::new();
+    let mut had_unhandled = false;
     for stmt in body {
         match translate_stmt(stmt) {
             Some(line) => {
@@ -260,6 +261,7 @@ fn translate_body(body: &[Stmt]) -> Option<BodyTranslation> {
                 }
             }
             None => {
+                had_unhandled = true;
                 out.push_str("    // Unhandled stmt: ");
                 out.push_str(&format!("{:?}\n", stmt));
             }
@@ -271,7 +273,7 @@ fn translate_body(body: &[Stmt]) -> Option<BodyTranslation> {
     Some(BodyTranslation {
         return_type: "f64".to_string(),
         body: out,
-        fallback: true,
+        fallback: had_unhandled,
     })
 }
 
@@ -303,6 +305,10 @@ fn translate_stmt(stmt: &Stmt) -> Option<String> {
             ))
         }
         Stmt::If(if_stmt) => {
+            if let Some(guard) = translate_len_guard(&if_stmt.test) {
+                return Some(guard);
+            }
+
             let test = expr_to_rust(&if_stmt.test);
             let body = translate_body(if_stmt.body.as_slice())
                 .map(|b| b.body)
@@ -418,6 +424,26 @@ fn expr_to_rust(expr: &Expr) -> String {
         }
         _ => "0".to_string(),
     }
+}
+
+fn translate_len_guard(test: &Expr) -> Option<String> {
+    if let Expr::Compare(comp) = test {
+        if comp.ops.len() == 1 && comp.comparators.len() == 1 {
+            let op = &comp.ops[0];
+            let left = expr_to_rust(&comp.left);
+            let right = expr_to_rust(&comp.comparators[0]);
+            let cond = match op {
+                Cmpop::Eq => format!("{left} == {right}"),
+                Cmpop::NotEq => format!("{left} != {right}"),
+                _ => return None,
+            };
+            return Some(format!(
+                "if {cond} {{\n        return Err(pyo3::exceptions::PyValueError::new_err(\"length mismatch\"));\n    }}",
+                cond = cond
+            ));
+        }
+    }
+    None
 }
 
 fn indent_block(body: &str, spaces: usize) -> String {
@@ -538,9 +564,9 @@ def euclidean(p1, p2):
         }];
 
         let tmp = tempdir().expect("tempdir");
-        let gen = generate(&source, &targets, tmp.path(), false).expect("generate");
-        assert_eq!(gen.generated_functions.len(), 1);
-        assert_eq!(gen.fallback_functions, 0);
+        let r#gen = generate(&source, &targets, tmp.path(), false).expect("generate");
+        assert_eq!(r#gen.generated_functions.len(), 1);
+        assert_eq!(r#gen.fallback_functions, 0);
         assert!(tmp.path().join("rustify_ml_ext/src/lib.rs").exists());
     }
 }
