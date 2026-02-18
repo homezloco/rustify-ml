@@ -367,6 +367,17 @@ fn translate_stmt_inner(stmt: &Stmt, depth: usize) -> Option<String> {
                 Some("return ();".to_string())
             }
         }
+        // Skip docstrings and bare expression statements (e.g. string literals used as docstrings)
+        Stmt::Expr(expr_stmt) => {
+            if let Expr::Constant(c) = expr_stmt.value.as_ref()
+                && matches!(c.value, rustpython_parser::ast::Constant::Str(_))
+            {
+                // Docstring — emit as a comment, not a fallback
+                return Some("// docstring omitted".to_string());
+            }
+            // Other bare expressions: emit as comment to avoid fallback
+            Some(format!("// expr: {}", expr_to_rust(&expr_stmt.value)))
+        }
         Stmt::If(if_stmt) => {
             if let Some(guard) = translate_len_guard(&if_stmt.test) {
                 return Some(guard);
@@ -784,6 +795,37 @@ def normalize_pixels(pixels, mean, std):
         assert!(
             translation.body.contains("vec![") || translation.body.contains("result["),
             "expected vec! or subscript in body, got: {}",
+            translation.body
+        );
+    }
+
+    #[test]
+    fn test_translate_dot_product_zero_fallback() {
+        // dot_product: total=0.0; for i in range(len(a)): total += a[i]*b[i]; return total
+        let code = r#"
+def dot_product(a, b):
+    total = 0.0
+    for i in range(len(a)):
+        total += a[i] * b[i]
+    return total
+"#;
+        let suite = Suite::parse(code, "<test>").expect("parse failed");
+        let stmts: &[Stmt] = suite.as_slice();
+        let target = TargetSpec {
+            func: "dot_product".to_string(),
+            line: 1,
+            percent: 80.0,
+            reason: "test".to_string(),
+        };
+        let translation = translate_function_body(&target, stmts).expect("no translation");
+        assert!(
+            !translation.fallback,
+            "dot_product should not fallback; body was:\n{}",
+            translation.body
+        );
+        assert!(
+            translation.body.contains("total +="),
+            "expected total += in body, got: {}",
             translation.body
         );
     }
