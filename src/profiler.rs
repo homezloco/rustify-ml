@@ -81,18 +81,20 @@ fn profile_input_core(source: &InputSource, threshold: f32, iterations: u32) -> 
     let profiler = format!(
         r#"
 import cProfile, pstats, runpy
+# Use a non-__main__ run_name to avoid executing script-side benchmarks guarded by
+# if __name__ == "__main__": blocks (prevents hangs during profiling).
 _iters = {iterations}
 prof = cProfile.Profile()
 prof.enable()
 for _ in range(_iters):
-    runpy.run_path(r"{path}", run_name="__main__")
+    runpy.run_path(r"{path}", run_name="__rustify_profile__")
 prof.disable()
 stats = pstats.Stats(prof)
 total = sum(v[3] for v in stats.stats.values()) or 1e-9
 for (fname, line, func), stat in stats.stats.items():
     ct = stat[3]
     pct = (ct / total) * 100.0
-    print(f"{{pct:.2f}}% {{func}} {{fname}}:{{line}}")
+    print(f"{pct:.2f}% {func} {fname}:{line}")
 "#,
         path = path.display()
     );

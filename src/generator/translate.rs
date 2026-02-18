@@ -213,9 +213,9 @@ pub(super) fn translate_stmt_inner(stmt: &Stmt, depth: usize) -> Option<String> 
                 if let Expr::ListComp(lc) = value.as_ref()
                     && lc.generators.len() == 1
                 {
-                    let gen = &lc.generators[0];
-                    let iter_str = expr_to_rust(&gen.iter);
-                    let loop_var = expr_to_rust(&gen.target);
+                    let comprehension = &lc.generators[0];
+                    let iter_str = expr_to_rust(&comprehension.iter);
+                    let loop_var = expr_to_rust(&comprehension.target);
                     let elt = expr_to_rust(&lc.elt);
                     let var_name = match target {
                         Expr::Name(n) => n.id.to_string(),

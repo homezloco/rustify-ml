@@ -2,8 +2,6 @@
 
 use rustpython_parser::ast::Expr;
 
-use super::expr::expr_to_rust;
-
 /// Infer Rust parameter types from a Python function's argument list.
 pub fn infer_params(args: &rustpython_parser::ast::Arguments) -> Vec<(String, String)> {
     args.args
@@ -87,6 +85,3 @@ pub fn render_len_checks(params: &[(String, String)]) -> Option<String> {
     Some(checks)
 }
 
-// Suppress unused import warning — expr_to_rust is used transitively via infer_type_from_annotation
-#[allow(unused_imports)]
-use super::expr::expr_to_rust as _expr_to_rust_unused;
