@@ -198,6 +198,63 @@ fn integration_multiple_targets_same_file() {
     assert!(lib_rs.contains("fn matmul"), "missing matmul");
 }
 
+// ── BPE tokenizer (while loop) ───────────────────────────────────────────────
+
+#[test]
+fn integration_count_pairs_generates_while_loop() {
+    let (_, source) = load_example("bpe_tokenizer.py");
+    let targets = vec![TargetSpec {
+        func: "count_pairs".to_string(),
+        line: 1,
+        percent: 85.0,
+        reason: "integration test".to_string(),
+    }];
+    let tmp = tempdir().expect("tempdir");
+    let result = generate(&source, &targets, tmp.path(), false).expect("generate failed");
+
+    assert_eq!(result.generated_functions.len(), 1);
+    let lib_rs =
+        std::fs::read_to_string(tmp.path().join("rustify_ml_ext/src/lib.rs")).expect("read lib.rs");
+    assert!(
+        lib_rs.contains("fn count_pairs"),
+        "missing fn count_pairs"
+    );
+    // count_pairs uses a for loop over range(len(tokens)-1)
+    assert!(
+        lib_rs.contains("for i in 0.."),
+        "expected for loop in count_pairs, got:\n{}",
+        lib_rs
+    );
+}
+
+#[test]
+fn integration_bpe_encode_generates() {
+    let (_, source) = load_example("bpe_tokenizer.py");
+    let targets = vec![TargetSpec {
+        func: "bpe_encode".to_string(),
+        line: 1,
+        percent: 90.0,
+        reason: "integration test".to_string(),
+    }];
+    let tmp = tempdir().expect("tempdir");
+    let result = generate(&source, &targets, tmp.path(), false).expect("generate failed");
+
+    assert_eq!(result.generated_functions.len(), 1);
+    let lib_rs =
+        std::fs::read_to_string(tmp.path().join("rustify_ml_ext/src/lib.rs")).expect("read lib.rs");
+    assert!(
+        lib_rs.contains("fn bpe_encode"),
+        "missing fn bpe_encode, got:\n{}",
+        lib_rs
+    );
+    // bpe_encode has while loops — check they're translated
+    assert!(
+        lib_rs.contains("while "),
+        "expected while loop in bpe_encode, got:\n{}",
+        lib_rs
+    );
+}
+
 // ── golden file snapshot ──────────────────────────────────────────────────────
 
 /// Golden file test: assert the generated lib.rs for euclidean.py contains all

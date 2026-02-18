@@ -46,19 +46,71 @@ python -c "from rustify_ml_ext import euclidean; print(euclidean([0.0,3.0,4.0],[
 ```
 rustify-ml accelerate [OPTIONS]
 
-Options:
+Input (one required):
   --file <PATH>          Python file to profile and accelerate
   --snippet              Read Python code from stdin
   --git <URL>            Git repo URL to clone and analyze
   --git-path <PATH>      Path within the git repo (required with --git)
+
+Profiler:
   --threshold <FLOAT>    Minimum hotspot % to target [default: 10.0]
+  --iterations <N>       Profiler loop count for better sampling [default: 100]
+  --list-targets         Profile only: print hotspot table and exit (no codegen)
+  --function <NAME>      Skip profiler, target a specific function by name
+
+Generation:
   --output <DIR>         Output directory for generated extension [default: dist]
-  --ml-mode              Enable ML-focused heuristics (numpy/torch hints)
+  --ml-mode              Enable ML-focused heuristics (numpy → PyReadonlyArray1)
   --dry-run              Generate code without building (inspect before install)
+  --benchmark            After building, run Python timing harness + speedup table
+
+Logging:
   -v / -vv               Increase verbosity (debug / trace)
 ```
 
-### Examples
+### New in latest build
+
+| Flag | What it does |
+|------|-------------|
+| `--list-targets` | Profile only, print ranked hotspot table, exit — no code generated |
+| `--function <name>` | Skip profiler entirely, target one function by name (100% weight) |
+| `--iterations <n>` | Control how many times the profiler loops the script (default: 100) |
+| `--ml-mode` | Detect numpy imports → use `PyReadonlyArray1<f64>` + add numpy dep to Cargo.toml |
+
+### BPE Tokenizer Demo
+
+One of the best targets for rustify-ml is the BPE (Byte-Pair Encoding) encode loop — the same algorithm used by tiktoken (OpenAI) and HuggingFace tokenizers. The inner merge pass is O(n²) in Python and translates cleanly to Rust `Vec<usize>` + `while` loops:
+
+```bash
+# Profile and generate Rust stubs for the BPE tokenizer
+cargo run -- accelerate \
+  --file examples/bpe_tokenizer.py \
+  --function count_pairs \
+  --output dist \
+  --dry-run
+
+# Or let the profiler find hotspots automatically
+cargo run -- accelerate \
+  --file examples/bpe_tokenizer.py \
+  --threshold 5 \
+  --output dist \
+  --benchmark
+```
+
+**Python baseline** (run `python benches/compare.py`):
+```
+  rustify-ml speedup comparison
+  Benchmark                      |    Python |  Iters
+  ------------------------------+-----------+-------
+  euclidean distance             |     0.312s |  10000
+  dot product (n=1000)           |     1.847s |   5000
+  normalize pixels (n=1000)      |     0.923s |   5000
+  count_pairs BPE (n=500)        |     0.614s |   5000
+```
+
+After `maturin develop --release`, run `python benches/compare.py --with-rust` to see speedups.
+
+## Examples
 
 ```bash
 # Snippet from stdin
@@ -268,14 +320,17 @@ cargo test
 See [plan.md](plan.md) for the full prioritized task list. High-level:
 
 1. ✅ **Core pipeline** — profile → analyze → generate → build
-2. ✅ **Translation coverage** — assign init, subscript assign, list init, range forms
-3. ✅ **Safety** — length-check guards, cargo check on generated crate
-4. ✅ **Profiler robustness** — python3/python fallback, version pre-flight, stdlib filter
-5. 🔄 **Nested for loops** — matmul pattern (in progress)
-6. 📋 **ndarray feature** — numpy-hint for Array1<f64> params
-7. 📋 **CLI polish** — `--list-targets`, `--function`, `--iterations`
-8. 📋 **Benchmarks** — Criterion before/after speedup suite
-9. 📋 **v0.1.0 release** — crates.io publish, CHANGELOG
+2. ✅ **Translation coverage** — assign init, subscript assign, list init, range forms, nested for loops
+3. ✅ **While loop translation** — `while changed:`, `while i < len(x):` → Rust while
+4. ✅ **Safety** — length-check guards, cargo check on generated crate
+5. ✅ **Profiler robustness** — python3/python fallback, version pre-flight, stdlib filter
+6. ✅ **CLI polish** — `--list-targets`, `--function`, `--iterations`, `--benchmark`
+7. ✅ **ndarray feature** — `--ml-mode` + numpy import → `PyReadonlyArray1<f64>` params
+8. ✅ **BPE tokenizer fixture** — `examples/bpe_tokenizer.py` + integration tests
+9. ✅ **Benchmark script** — `benches/compare.py` (Python baseline + `--with-rust` mode)
+10. 📋 **List comprehension** — `[f(x) for x in xs]` → `xs.iter().map(f).collect()`
+11. 📋 **Criterion benchmarks** — `benches/speedup.rs` for CI perf tracking
+12. 📋 **v0.1.0 release** — crates.io publish, CHANGELOG, GitHub release
 
 ---
 

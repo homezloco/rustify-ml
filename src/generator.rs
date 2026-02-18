@@ -416,6 +416,21 @@ fn translate_stmt_inner(stmt: &Stmt, depth: usize) -> Option<String> {
             };
             Some(format!("{} {} {};", lhs, op, rhs))
         }
+        Stmt::While(while_stmt) => {
+            // Translate `while changed:` → `while changed {`
+            // Translate `while i < len(tokens) - 1:` → `while i < tokens.len() - 1 {`
+            let test = translate_while_test(&while_stmt.test);
+            let inner = translate_body_inner(while_stmt.body.as_slice(), depth + 1);
+            let loop_body = inner
+                .map(|b| b.body)
+                .unwrap_or_else(|| format!("{}    // unhandled while body", "    ".repeat(depth)));
+            Some(format!(
+                "while {test} {{\n{loop_body}\n{indent}}}",
+                test = test,
+                loop_body = loop_body,
+                indent = "    ".repeat(depth)
+            ))
+        }
         Stmt::Return(ret) => {
             if let Some(v) = &ret.value {
                 Some(format!("return {};", expr_to_rust(v)))
@@ -574,6 +589,40 @@ fn expr_to_rust(expr: &Expr) -> String {
             format!("{}.{}", expr_to_rust(&attr.value), attr.attr)
         }
         _ => "0".to_string(),
+    }
+}
+
+/// Translate a Python while-loop test expression to Rust.
+/// Handles: `changed` (bool name), `i < len(x) - 1`, `i < n`, comparisons.
+fn translate_while_test(test: &Expr) -> String {
+    match test {
+        // `while changed:` → `while changed {`
+        Expr::Name(n) => n.id.to_string(),
+        // `while not changed:` → `while !changed {`
+        Expr::UnaryOp(unary) => {
+            use rustpython_parser::ast::UnaryOp;
+            if matches!(unary.op, UnaryOp::Not) {
+                format!("!{}", translate_while_test(&unary.operand))
+            } else {
+                expr_to_rust(test)
+            }
+        }
+        // `while i < len(tokens) - 1:` → `while i < tokens.len() - 1 {`
+        Expr::Compare(comp) if comp.ops.len() == 1 && comp.comparators.len() == 1 => {
+            let left = expr_to_rust(&comp.left);
+            let right = expr_to_rust(&comp.comparators[0]);
+            let op = match comp.ops[0] {
+                CmpOp::Lt => "<",
+                CmpOp::LtE => "<=",
+                CmpOp::Gt => ">",
+                CmpOp::GtE => ">=",
+                CmpOp::Eq => "==",
+                CmpOp::NotEq => "!=",
+                _ => "<",
+            };
+            format!("{left} {op} {right}")
+        }
+        _ => expr_to_rust(test),
     }
 }
 
@@ -1008,6 +1057,65 @@ def dot_product(a, b):
             lib_rs.contains("Vec<f64>"),
             "expected Vec<f64> without numpy import, got:\n{}",
             lib_rs
+        );
+    }
+
+    #[test]
+    fn test_translate_while_loop_bool_flag() {
+        // while changed: ... → while changed { ... }
+        let code = r#"
+def count_pairs(tokens):
+    counts = 0
+    changed = True
+    while changed:
+        changed = False
+        counts += 1
+    return counts
+"#;
+        let suite = Suite::parse(code, "<test>").expect("parse failed");
+        let stmts: &[Stmt] = suite.as_slice();
+        let target = TargetSpec {
+            func: "count_pairs".to_string(),
+            line: 1,
+            percent: 100.0,
+            reason: "while test".to_string(),
+        };
+        let translation = translate_function_body(&target, stmts).expect("no translation");
+        assert!(
+            translation.body.contains("while changed"),
+            "expected 'while changed' in body, got:\n{}",
+            translation.body
+        );
+    }
+
+    #[test]
+    fn test_translate_while_comparison() {
+        // while i < len(tokens) - 1: → while i < tokens.len() - 1 {
+        let code = r#"
+def scan(tokens):
+    i = 0
+    while i < len(tokens):
+        i += 1
+    return i
+"#;
+        let suite = Suite::parse(code, "<test>").expect("parse failed");
+        let stmts: &[Stmt] = suite.as_slice();
+        let target = TargetSpec {
+            func: "scan".to_string(),
+            line: 1,
+            percent: 100.0,
+            reason: "while comparison test".to_string(),
+        };
+        let translation = translate_function_body(&target, stmts).expect("no translation");
+        assert!(
+            translation.body.contains("while i <"),
+            "expected 'while i <' in body, got:\n{}",
+            translation.body
+        );
+        assert!(
+            translation.body.contains("tokens.len()"),
+            "expected 'tokens.len()' in while test, got:\n{}",
+            translation.body
         );
     }
 
