@@ -3,6 +3,14 @@ name = "rustify-ml"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "rustify-ml"
+path = "src/main.rs"
+
+[lib]
+name = "rustify_ml"
+path = "src/lib.rs"
+
 [dependencies]
 anyhow = "1"
 clap = { version = "4.5", features = ["derive"] }
@@ -15,3 +23,10 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 quote = "1.0"
 syn = { version = "2.0", features = ["full", "parsing", "printing"] }
 prettyplease = "0.2"
+ndarray = { version = "0.16", optional = true }
+tch = { version = "0.15", optional = true }
+
+[features]
+default = []
+numpy-hint = ["ndarray"]
+torch-hint = ["tch"]

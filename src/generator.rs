@@ -49,8 +49,7 @@ pub fn generate(
     let cargo_toml = render_cargo_toml();
 
     fs::write(crate_dir.join("src/lib.rs"), lib_rs).context("failed to write lib.rs")?;
-    fs::write(crate_dir.join("Cargo.toml"), cargo_toml)
-        .context("failed to write Cargo.toml")?;
+    fs::write(crate_dir.join("Cargo.toml"), cargo_toml).context("failed to write Cargo.toml")?;
     if dry_run {
         info!(path = %crate_dir.display(), "dry-run: wrote generated files (no build)");
     }
@@ -386,7 +385,7 @@ fn infer_type_from_annotation(annotation: Option<&Expr>) -> String {
 fn expr_to_rust(expr: &Expr) -> String {
     match expr {
         Expr::Name(n) => n.id.to_string(),
-        Expr::Constant(c) => format!("{:?}", c.value),
+        Expr::Constant(c) => constant_to_rust(&c.value),
         Expr::Call(call) => {
             if let Expr::Name(func) = call.func.as_ref() {
                 if func.id.as_str() == "range" && call.args.len() == 1 {
@@ -443,6 +442,27 @@ fn translate_len_guard(test: &Expr) -> Option<String> {
         }
     }
     None
+}
+
+/// Convert a Python constant value to its Rust literal equivalent.
+fn constant_to_rust(value: &rustpython_parser::ast::Constant) -> String {
+    use rustpython_parser::ast::Constant;
+    match value {
+        Constant::Int(i) => i.to_string(),
+        Constant::Float(f) => {
+            // Ensure it renders as a valid Rust float literal
+            let s = format!("{}", f);
+            if s.contains('.') || s.contains('e') {
+                s
+            } else {
+                format!("{}.0", s)
+            }
+        }
+        Constant::Bool(b) => b.to_string(),
+        Constant::Str(s) => format!("\"{}\"", s.escape_default()),
+        Constant::None => "()".to_string(),
+        _ => "0".to_string(),
+    }
 }
 
 fn indent_block(body: &str, spaces: usize) -> String {
@@ -507,7 +527,7 @@ mod tests {
                 },
             ))),
         }));
-        assert_eq!(expr_to_rust(&bin), "(x).powf(2 as f64)");
+        assert_eq!(expr_to_rust(&bin), "(x).powf(2)");
     }
 
     #[test]

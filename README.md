@@ -31,6 +31,17 @@ print(euclidean([0.0, 0.0], [3.0, 4.0]))  # expect 5.0
 PY
 ```
 
+Quick timing (Python timeit)
+```python
+import timeit
+from rustify_ml_ext import euclidean
+
+p1 = list(range(100_000))
+p2 = list(range(100_000, 200_000))
+
+print("accelerated (50 runs):", timeit.timeit(lambda: euclidean(p1, p2), number=50))
+```
+
 ## Development
 - Rust 1.75+ recommended
 - Install maturin and Python 3.10+
