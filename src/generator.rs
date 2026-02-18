@@ -4,7 +4,7 @@ use std::path::Path;
 use anyhow::{Context, Result, anyhow};
 use heck::ToSnakeCase;
 use rustpython_parser::Parse;
-use rustpython_parser::ast::{Cmpop, Expr, Operator, Stmt, Suite};
+use rustpython_parser::ast::{CmpOp, Expr, Operator, Stmt, Suite};
 use tracing::{info, warn};
 
 use crate::utils::{GenerationResult, InputSource, TargetSpec, extract_code};
@@ -48,12 +48,11 @@ pub fn generate(
     let lib_rs = render_lib_rs(&functions);
     let cargo_toml = render_cargo_toml();
 
+    fs::write(crate_dir.join("src/lib.rs"), lib_rs).context("failed to write lib.rs")?;
+    fs::write(crate_dir.join("Cargo.toml"), cargo_toml)
+        .context("failed to write Cargo.toml")?;
     if dry_run {
-        info!("dry-run: generation skipped writing files");
-    } else {
-        fs::write(crate_dir.join("src/lib.rs"), lib_rs).context("failed to write lib.rs")?;
-        fs::write(crate_dir.join("Cargo.toml"), cargo_toml)
-            .context("failed to write Cargo.toml")?;
+        info!(path = %crate_dir.display(), "dry-run: wrote generated files (no build)");
     }
 
     if fallback_functions > 0 {
@@ -408,7 +407,7 @@ fn expr_to_rust(expr: &Expr) -> String {
                 Operator::Mult => "*",
                 Operator::Div => "/",
                 Operator::Pow => {
-                    return format!("({}).powf({} as f64)", left, right);
+                    return format!("({}).powf({})", left, right);
                 }
                 _ => "+",
             };
@@ -433,12 +432,12 @@ fn translate_len_guard(test: &Expr) -> Option<String> {
             let left = expr_to_rust(&comp.left);
             let right = expr_to_rust(&comp.comparators[0]);
             let cond = match op {
-                Cmpop::Eq => format!("{left} == {right}"),
-                Cmpop::NotEq => format!("{left} != {right}"),
+                CmpOp::Eq => format!("{left} == {right}"),
+                CmpOp::NotEq => format!("{left} != {right}"),
                 _ => return None,
             };
             return Some(format!(
-                "if {cond} {{\n        return Err(pyo3::exceptions::PyValueError::new_err(\"length mismatch\"));\n    }}",
+                "if {cond} {{\n        return Err(pyo3::exceptions::PyValueError::new_err(\"Vectors must be same length\"));\n    }}",
                 cond = cond
             ));
         }
