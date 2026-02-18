@@ -1,9 +1,9 @@
-mod analyzer;
-mod builder;
-mod generator;
-mod input;
-mod profiler;
-mod utils;
+use rustify_ml::analyzer;
+use rustify_ml::builder;
+use rustify_ml::generator;
+use rustify_ml::input;
+use rustify_ml::profiler;
+use rustify_ml::utils;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -102,9 +102,9 @@ fn main() -> Result<()> {
                 git_path.as_deref(),
             )?;
             let input_kind = match &source {
-                crate::utils::InputSource::File { path, .. } => format!("file:{}", path.display()),
-                crate::utils::InputSource::Snippet(_) => "snippet:stdin".to_string(),
-                crate::utils::InputSource::Git { repo, path, .. } => {
+                utils::InputSource::File { path, .. } => format!("file:{}", path.display()),
+                utils::InputSource::Snippet(_) => "snippet:stdin".to_string(),
+                utils::InputSource::Git { repo, path, .. } => {
                     format!("git:{}:{}", repo, path.display())
                 }
             };

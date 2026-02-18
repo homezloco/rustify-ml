@@ -8,28 +8,51 @@ on:
 
 jobs:
   build:
+    name: Build & Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
+
+    defaults:
+      run:
+        working-directory: rustify-ml
 
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions-rs/toolchain@v1
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
-          profile: minimal
-          override: true
+          components: rustfmt, clippy
 
-      - name: Cargo fmt
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rustify-ml/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('rustify-ml/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install maturin
+        run: pip install maturin
+
+      - name: cargo fmt --check
         run: cargo fmt -- --check
 
-      - name: Cargo clippy
+      - name: cargo clippy
         run: cargo clippy -- -D warnings
 
-      - name: Cargo test
-        run: cargo test
-
-      - name: Cargo check
+      - name: cargo check
         run: cargo check
+
+      - name: cargo test (unit + integration)
+        run: cargo test

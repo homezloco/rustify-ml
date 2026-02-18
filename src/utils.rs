@@ -42,7 +42,6 @@ pub struct TargetSpec {
 pub struct GenerationResult {
     pub crate_dir: PathBuf,
     pub generated_functions: Vec<String>,
-    #[allow(dead_code)]
     pub fallback_functions: usize,
 }
 
