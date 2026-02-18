@@ -36,6 +36,9 @@ enum Commands {
         /// Git repository URL to clone and analyze (optional)
         #[arg(long)]
         git: Option<String>,
+        /// Path within the git repo to analyze (required when using --git)
+        #[arg(long, value_name = "RELATIVE_PATH")]
+        git_path: Option<std::path::PathBuf>,
         /// Minimum hotspot threshold percentage
         #[arg(long, default_value_t = 10.0)]
         threshold: f32,
@@ -75,6 +78,7 @@ fn main() -> Result<()> {
             file,
             snippet,
             git,
+            git_path,
             threshold,
             output,
             ml_mode,
@@ -84,17 +88,25 @@ fn main() -> Result<()> {
                 ?file,
                 snippet,
                 ?git,
+                ?git_path,
                 threshold,
                 ?output,
                 ml_mode,
                 dry_run,
                 "starting accelerate"
             );
-            let source = input::load_input(file.as_deref(), snippet, git.as_deref())?;
+            let source = input::load_input(
+                file.as_deref(),
+                snippet,
+                git.as_deref(),
+                git_path.as_deref(),
+            )?;
             let input_kind = match &source {
                 crate::utils::InputSource::File { path, .. } => format!("file:{}", path.display()),
                 crate::utils::InputSource::Snippet(_) => "snippet:stdin".to_string(),
-                crate::utils::InputSource::GitPlaceholder(repo) => format!("git:{}", repo),
+                crate::utils::InputSource::Git { repo, path, .. } => {
+                    format!("git:{}:{}", repo, path.display())
+                }
             };
             let profile = profiler::profile_input(&source, threshold)?;
             let targets = analyzer::select_targets(&profile, threshold, ml_mode);

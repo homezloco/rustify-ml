@@ -1,14 +1,21 @@
 use std::fs;
 use std::path::PathBuf;
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result};
 use tempfile::TempDir;
 
 #[derive(Debug, Clone)]
 pub enum InputSource {
-    File { path: PathBuf, code: String },
+    File {
+        path: PathBuf,
+        code: String,
+    },
     Snippet(String),
-    GitPlaceholder(String),
+    Git {
+        repo: String,
+        path: PathBuf,
+        code: String,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -41,7 +48,18 @@ pub struct GenerationResult {
 /// Returns the path and a TempDir to keep the file alive for the caller's scope.
 pub fn materialize_input(source: &InputSource) -> Result<(PathBuf, TempDir)> {
     let tmpdir = tempfile::tempdir().context("failed to create temp dir for input")?;
-    let path = tmpdir.path().join("input.py");
+    let filename = match source {
+        InputSource::File { path, .. } => path
+            .file_name()
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("input.py")),
+        InputSource::Snippet(_) => PathBuf::from("input.py"),
+        InputSource::Git { path, .. } => path
+            .file_name()
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("input.py")),
+    };
+    let path = tmpdir.path().join(filename);
 
     match source {
         InputSource::File { path: src, .. } => {
@@ -51,8 +69,8 @@ pub fn materialize_input(source: &InputSource) -> Result<(PathBuf, TempDir)> {
         InputSource::Snippet(code) => {
             fs::write(&path, code).context("failed to write snippet to temp file")?;
         }
-        InputSource::GitPlaceholder(repo) => {
-            return Err(anyhow!("git input not yet implemented: {}", repo));
+        InputSource::Git { code, .. } => {
+            fs::write(&path, code).context("failed to write git file to temp file")?;
         }
     }
 
@@ -63,8 +81,6 @@ pub fn extract_code(source: &InputSource) -> Result<String> {
     match source {
         InputSource::File { code, .. } => Ok(code.clone()),
         InputSource::Snippet(code) => Ok(code.clone()),
-        InputSource::GitPlaceholder(repo) => {
-            Err(anyhow!("git input not yet implemented: {}", repo))
-        }
+        InputSource::Git { code, .. } => Ok(code.clone()),
     }
 }
