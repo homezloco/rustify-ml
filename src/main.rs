@@ -119,7 +119,8 @@ fn main() -> Result<()> {
             builder::build_extension(&generation, dry_run)?;
 
             // Optional benchmark: run Python timing harness and print speedup
-            if benchmark && !dry_run
+            if benchmark
+                && !dry_run
                 && let Err(e) = builder::run_benchmark(&source, &generation, &targets)
             {
                 warn!(err = %e, "benchmark failed; skipping speedup output");
