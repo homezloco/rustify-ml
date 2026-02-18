@@ -107,8 +107,5 @@ fn accelerate_nonexistent_file_exits_nonzero() {
         .status()
         .expect("failed to spawn rustify-ml binary");
 
-    assert!(
-        !status.success(),
-        "expected non-zero exit for missing file"
-    );
+    assert!(!status.success(), "expected non-zero exit for missing file");
 }

@@ -279,8 +279,47 @@ fn translate_stmt(stmt: &Stmt) -> Option<String> {
     match stmt {
         Stmt::Assign(assign) => {
             if let (Some(target), value) = (assign.targets.first(), &assign.value) {
+                // Subscript assign: result[i] = val  →  result[i] = val;
+                if let Expr::Subscript(sub) = target {
+                    let lhs = format!("{}[{}]", expr_to_rust(&sub.value), expr_to_rust(&sub.slice));
+                    let rhs = expr_to_rust(value);
+                    return Some(format!("{} = {};", lhs, rhs));
+                }
+
+                // List init: result = [0.0] * n  →  let mut result = vec![0.0f64; n];
+                if let Expr::BinOp(binop) = value.as_ref() {
+                    if matches!(binop.op, Operator::Mult) {
+                        if let Expr::List(lst) = binop.left.as_ref() {
+                            if lst.elts.len() == 1 {
+                                let fill = expr_to_rust(&lst.elts[0]);
+                                let size = expr_to_rust(&binop.right);
+                                let var_name = match target {
+                                    Expr::Name(n) => n.id.to_string(),
+                                    _ => "result".to_string(),
+                                };
+                                // Determine fill type suffix
+                                let fill_rust = if fill.contains('.') {
+                                    format!("{}f64", fill)
+                                } else {
+                                    fill.clone()
+                                };
+                                return Some(format!(
+                                    "let mut {var} = vec![{fill}; {size}];",
+                                    var = var_name,
+                                    fill = fill_rust,
+                                    size = size
+                                ));
+                            }
+                        }
+                    }
+                }
+
                 let lhs = match target {
-                    Expr::Name(n) => format!("let mut {}", n.id),
+                    Expr::Name(n) => {
+                        // Infer type suffix for float/int literals
+                        let type_suffix = infer_assign_type(value);
+                        format!("let mut {}{}", n.id, type_suffix)
+                    }
                     Expr::Attribute(_) => format!("// attribute assign {}", expr_to_rust(target)),
                     _ => format!("// complex assign {}", expr_to_rust(target)),
                 };
@@ -290,15 +329,16 @@ fn translate_stmt(stmt: &Stmt) -> Option<String> {
             None
         }
         Stmt::For(for_stmt) => {
-            let iter_expr = expr_to_rust(&for_stmt.iter);
+            // Detect range(n) or range(len(x)) for loop
+            let iter_str = translate_for_iter(&for_stmt.iter);
             let loop_var = expr_to_rust(&for_stmt.target);
             let loop_body = translate_body(for_stmt.body.as_slice())
                 .map(|b| b.body)
-                .unwrap_or_else(|| "// unhandled loop body".to_string());
+                .unwrap_or_else(|| "    // unhandled loop body".to_string());
             Some(format!(
-                "for {loop_var} in {iter_expr} {{\n{loop_body}\n    }}",
+                "for {loop_var} in {iter_str} {{\n{loop_body}\n    }}",
                 loop_var = loop_var,
-                iter_expr = iter_expr,
+                iter_str = iter_str,
                 loop_body = indent_block(&loop_body, 4)
             ))
         }
@@ -351,6 +391,42 @@ fn translate_stmt(stmt: &Stmt) -> Option<String> {
         }
         _ => None,
     }
+}
+
+/// Infer a Rust type annotation suffix for a simple assignment RHS.
+/// Returns ": f64" for float literals, ": usize" for int literals, "" otherwise.
+fn infer_assign_type(value: &Expr) -> &'static str {
+    match value {
+        Expr::Constant(c) => match &c.value {
+            rustpython_parser::ast::Constant::Float(_) => ": f64",
+            rustpython_parser::ast::Constant::Int(_) => ": i64",
+            _ => "",
+        },
+        _ => "",
+    }
+}
+
+/// Translate a Python for-loop iterator expression to a Rust range string.
+/// Handles: range(n), range(len(x)), and falls back to expr_to_rust.
+fn translate_for_iter(iter: &Expr) -> String {
+    if let Expr::Call(call) = iter {
+        if let Expr::Name(func) = call.func.as_ref() {
+            if func.id.as_str() == "range" {
+                match call.args.len() {
+                    1 => return format!("0..{}", expr_to_rust(&call.args[0])),
+                    2 => {
+                        return format!(
+                            "{}..{}",
+                            expr_to_rust(&call.args[0]),
+                            expr_to_rust(&call.args[1])
+                        );
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+    expr_to_rust(iter)
 }
 
 fn infer_params(args: &rustpython_parser::ast::Arguments) -> Vec<(String, String)> {
@@ -477,6 +553,7 @@ fn indent_block(body: &str, spaces: usize) -> String {
 mod tests {
     use super::*;
     use crate::utils::TargetSpec;
+    use rustpython_parser::text_size::TextRange;
     use std::path::PathBuf;
     use tempfile::tempdir;
 
@@ -484,28 +561,34 @@ mod tests {
     fn test_expr_to_rust_range_and_len() {
         let range_expr = Expr::Call(Box::new(rustpython_parser::ast::ExprCall {
             func: Box::new(Expr::Name(Box::new(rustpython_parser::ast::ExprName {
+                range: TextRange::default(),
                 id: "range".into(),
                 ctx: rustpython_parser::ast::ExprContext::Load,
             }))),
             args: vec![Expr::Constant(Box::new(
                 rustpython_parser::ast::ExprConstant {
+                    range: TextRange::default(),
                     value: rustpython_parser::ast::Constant::Int(10.into()),
                     kind: None,
                 },
             ))],
             keywords: vec![],
+            range: TextRange::default(),
         }));
 
         let len_expr = Expr::Call(Box::new(rustpython_parser::ast::ExprCall {
             func: Box::new(Expr::Name(Box::new(rustpython_parser::ast::ExprName {
+                range: TextRange::default(),
                 id: "len".into(),
                 ctx: rustpython_parser::ast::ExprContext::Load,
             }))),
             args: vec![Expr::Name(Box::new(rustpython_parser::ast::ExprName {
+                range: TextRange::default(),
                 id: "a".into(),
                 ctx: rustpython_parser::ast::ExprContext::Load,
             }))],
             keywords: vec![],
+            range: TextRange::default(),
         }));
 
         assert_eq!(expr_to_rust(&range_expr), "0..10");
@@ -515,13 +598,16 @@ mod tests {
     #[test]
     fn test_expr_to_rust_binop_pow() {
         let bin = Expr::BinOp(Box::new(rustpython_parser::ast::ExprBinOp {
+            range: TextRange::default(),
             left: Box::new(Expr::Name(Box::new(rustpython_parser::ast::ExprName {
+                range: TextRange::default(),
                 id: "x".into(),
                 ctx: rustpython_parser::ast::ExprContext::Load,
             }))),
             op: Operator::Pow,
             right: Box::new(Expr::Constant(Box::new(
                 rustpython_parser::ast::ExprConstant {
+                    range: TextRange::default(),
                     value: rustpython_parser::ast::Constant::Int(2.into()),
                     kind: None,
                 },
@@ -565,6 +651,133 @@ def euclidean(p1, p2):
         assert!(!translation.fallback, "euclidean should not fallback");
         assert!(translation.body.contains("for i in 0.."));
         assert!(translation.body.contains("total"));
+    }
+
+    #[test]
+    fn test_translate_stmt_float_assign_init() {
+        // total = 0.0  →  let mut total: f64 = 0.0;
+        let code = r#"
+def f(x):
+    total = 0.0
+    return total
+"#;
+        let suite = Suite::parse(code, "<test>").expect("parse failed");
+        let stmts: &[Stmt] = suite.as_slice();
+        let target = TargetSpec {
+            func: "f".to_string(),
+            line: 1,
+            percent: 100.0,
+            reason: "test".to_string(),
+        };
+        let translation = translate_function_body(&target, stmts).expect("no translation");
+        assert!(
+            translation.body.contains("let mut total: f64"),
+            "expected 'let mut total: f64' in body, got: {}",
+            translation.body
+        );
+    }
+
+    #[test]
+    fn test_translate_stmt_subscript_assign() {
+        // result[i] = val  →  result[i] = val;
+        let code = r#"
+def f(result, i, val):
+    result[i] = val
+    return result
+"#;
+        let suite = Suite::parse(code, "<test>").expect("parse failed");
+        let stmts: &[Stmt] = suite.as_slice();
+        let target = TargetSpec {
+            func: "f".to_string(),
+            line: 1,
+            percent: 100.0,
+            reason: "test".to_string(),
+        };
+        let translation = translate_function_body(&target, stmts).expect("no translation");
+        assert!(
+            translation.body.contains("result[i] = val"),
+            "expected subscript assign in body, got: {}",
+            translation.body
+        );
+    }
+
+    #[test]
+    fn test_translate_stmt_list_init() {
+        // result = [0.0] * n  →  let mut result = vec![0.0f64; n];
+        let code = r#"
+def f(n):
+    result = [0.0] * n
+    return result
+"#;
+        let suite = Suite::parse(code, "<test>").expect("parse failed");
+        let stmts: &[Stmt] = suite.as_slice();
+        let target = TargetSpec {
+            func: "f".to_string(),
+            line: 1,
+            percent: 100.0,
+            reason: "test".to_string(),
+        };
+        let translation = translate_function_body(&target, stmts).expect("no translation");
+        assert!(
+            translation.body.contains("vec![") && translation.body.contains("result"),
+            "expected vec! init in body, got: {}",
+            translation.body
+        );
+    }
+
+    #[test]
+    fn test_translate_for_iter_range_two_args() {
+        // range(start, end) → start..end
+        let call = Expr::Call(Box::new(rustpython_parser::ast::ExprCall {
+            range: TextRange::default(),
+            func: Box::new(Expr::Name(Box::new(rustpython_parser::ast::ExprName {
+                range: TextRange::default(),
+                id: "range".into(),
+                ctx: rustpython_parser::ast::ExprContext::Load,
+            }))),
+            args: vec![
+                Expr::Constant(Box::new(rustpython_parser::ast::ExprConstant {
+                    range: TextRange::default(),
+                    value: rustpython_parser::ast::Constant::Int(1.into()),
+                    kind: None,
+                })),
+                Expr::Constant(Box::new(rustpython_parser::ast::ExprConstant {
+                    range: TextRange::default(),
+                    value: rustpython_parser::ast::Constant::Int(10.into()),
+                    kind: None,
+                })),
+            ],
+            keywords: vec![],
+        }));
+        assert_eq!(translate_for_iter(&call), "1..10");
+    }
+
+    #[test]
+    fn test_translate_normalize_pixels_body() {
+        // normalize_pixels has: result = [0.0] * len(pixels), for i in range(len(pixels)): result[i] = ...
+        let code = r#"
+def normalize_pixels(pixels, mean, std):
+    result = [0.0] * len(pixels)
+    for i in range(len(pixels)):
+        result[i] = (pixels[i] - mean) / std
+    return result
+"#;
+        let suite = Suite::parse(code, "<test>").expect("parse failed");
+        let stmts: &[Stmt] = suite.as_slice();
+        let target = TargetSpec {
+            func: "normalize_pixels".to_string(),
+            line: 1,
+            percent: 100.0,
+            reason: "test".to_string(),
+        };
+        let translation = translate_function_body(&target, stmts).expect("no translation");
+        // Should not fully fallback — list init and subscript assign are now handled
+        // The body should contain vec! or result[
+        assert!(
+            translation.body.contains("vec![") || translation.body.contains("result["),
+            "expected vec! or subscript in body, got: {}",
+            translation.body
+        );
     }
 
     #[test]

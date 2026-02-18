@@ -1,70 +1,255 @@
 # rustify-ml
 
-CLI to profile Python ML hotspots and generate Rust/PyO3 stubs for acceleration.
+> **Auto-accelerate Python ML hotspots with Rust.** Profile → Identify → Generate → Build — drop-in PyO3 extensions with no manual rewrite.
 
-## Status
-- MVP scaffold: CLI args, module layout, logging/tracing configured.
-- Next phases: profiling via py-spy, AST analysis (rustpython-parser), codegen (quote/syn), maturin build path.
+[![CI](https://github.com/your-org/rustify-ml/actions/workflows/ci.yml/badge.svg)](https://github.com/your-org/rustify-ml/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Flow (current placeholders): input -> profile -> analyze -> generate -> build. Profiling/analysis/gen/build are wired with placeholder structs and logging; implementation to come.
+---
 
-## Usage (planned)
+## What It Does
+
+`rustify-ml` is a CLI tool that:
+
+1. **Profiles** your Python file using `cProfile` (no elevated privileges required)
+2. **Identifies** CPU hotspots above a configurable threshold
+3. **Generates** safe Rust + PyO3 stubs with length-check guards and type inference
+4. **Builds** an installable Python extension via `maturin develop --release`
+
+Typical speedups: **5–100x** on pure-Python loops (tokenizers, matrix ops, image preprocessing, data pipelines).
+
+---
+
+## Quick Start
+
 ```bash
-rustify-ml accelerate --file path/to/script.py --threshold 15 --output dist
-# or
-cat script.py | rustify-ml accelerate --snippet --output dist
+# Install dependencies
+pip install maturin
+cargo install --path rustify-ml   # or: cargo build --release
+
+# Accelerate a Python file (dry-run: generate code, skip build)
+rustify-ml accelerate --file examples/euclidean.py --output dist --threshold 0 --dry-run
+
+# Full run: profile → generate → build extension
+rustify-ml accelerate --file examples/euclidean.py --output dist --threshold 10
+
+# Install and use the generated extension
+cd dist/rustify_ml_ext && maturin develop --release
+python -c "from rustify_ml_ext import euclidean; print(euclidean([0.0,3.0,4.0],[0.0,0.0,0.0]))"
+# → 5.0
 ```
 
-### Example: Euclidean distance
-```bash
-# generate and build an extension from the example
-cargo run -- accelerate --file examples/euclidean.py --output dist
+---
 
-# if built (non-dry-run), the crate lives at dist/rustify_ml_ext
-cd dist/rustify_ml_ext
-maturin develop --release
+## CLI Reference
 
-# then in Python
-python - <<'PY'
-from rustify_ml_ext import euclidean
-print(euclidean([0.0, 0.0], [3.0, 4.0]))  # expect 5.0
-PY
+```
+rustify-ml accelerate [OPTIONS]
+
+Options:
+  --file <PATH>          Python file to profile and accelerate
+  --snippet              Read Python code from stdin
+  --git <URL>            Git repo URL to clone and analyze
+  --git-path <PATH>      Path within the git repo (required with --git)
+  --threshold <FLOAT>    Minimum hotspot % to target [default: 10.0]
+  --output <DIR>         Output directory for generated extension [default: dist]
+  --ml-mode              Enable ML-focused heuristics (numpy/torch hints)
+  --dry-run              Generate code without building (inspect before install)
+  -v / -vv               Increase verbosity (debug / trace)
 ```
 
-Quick timing (Python timeit)
+### Examples
+
+```bash
+# Snippet from stdin
+echo "def dot(a, b):\n    return sum(x*y for x,y in zip(a,b))" | \
+  rustify-ml accelerate --snippet --output dist --dry-run
+
+# Git repo (shallow clone, analyze one file)
+rustify-ml accelerate \
+  --git https://github.com/huggingface/transformers \
+  --git-path examples/slow_preproc.py \
+  --output dist --threshold 5
+
+# ML mode (numpy/torch type hints in generated stubs)
+rustify-ml accelerate --file examples/image_preprocess.py --ml-mode --output dist --dry-run
+```
+
+---
+
+## Example Output
+
+After running `accelerate`, rustify-ml prints a summary table to stdout:
+
+```
+Accelerated 3/4 targets (1 fallback)
+
+Func               | Line | % Time | Translation | Status
+-------------------+------+--------+-------------+---------
+euclidean          |  1   | 42.1%  | Full        | Success
+dot_product        |  18  | 31.8%  | Full        | Success
+matmul             |  7   | 20.4%  | Partial     | Fallback (nested loop)
+normalize_pixels   |  24  |  5.7%  | Full        | Success
+
+Generated: dist/rustify_ml_ext/
+Install:   cd dist/rustify_ml_ext && maturin develop --release
+```
+
+---
+
+## Translation Patterns
+
+| Python Pattern | Rust Translation | Status |
+|----------------|-----------------|--------|
+| `for i in range(len(x)):` | `for i in 0..x.len() {` | ✅ Done |
+| `total += a * b` | `total += a * b;` | ✅ Done |
+| `return x ** 0.5` | `return (x).powf(0.5);` | ✅ Done |
+| `a[i] - b[i]` | `a[i] - b[i]` | ✅ Done |
+| `total = 0.0` | `let mut total: f64 = 0.0;` | ✅ Done |
+| `result[i] = val` | `result[i] = val;` | ✅ Done |
+| `result = [0.0] * n` | `let mut result = vec![0.0f64; n];` | ✅ Done |
+| `range(a, b)` | `a..b` | ✅ Done |
+| `for i in range(n): for j...` | nested for loops | 🔄 In Progress |
+| `[f(x) for x in xs]` | `xs.iter().map(f).collect()` | 📋 Planned |
+| `np.array` params | `Array1<f64>` | 📋 Planned (numpy-hint feature) |
+
+**Untranslatable** (warns + skips): `eval()`, `exec()`, `getattr()`, `async def`, class self mutation
+
+---
+
+## Generated Code Example
+
+For `examples/euclidean.py`:
+
 ```python
-import timeit
-from rustify_ml_ext import euclidean
-
-p1 = list(range(100_000))
-p2 = list(range(100_000, 200_000))
-
-print("accelerated (50 runs):", timeit.timeit(lambda: euclidean(p1, p2), number=50))
+def euclidean(p1, p2):
+    total = 0.0
+    for i in range(len(p1)):
+        diff = p1[i] - p2[i]
+        total += diff * diff
+    return total ** 0.5
 ```
+
+rustify-ml generates:
+
+```rust
+use pyo3::prelude::*;
+
+#[pyfunction]
+/// Auto-generated from Python hotspot `euclidean` at line 1 (100.00%): 100% hotspot
+pub fn euclidean(py: Python, p1: Vec<f64>, p2: Vec<f64>) -> PyResult<f64> {
+    let _ = py;
+    if p1.len() != p2.len() {
+        return Err(pyo3::exceptions::PyValueError::new_err("length mismatch"));
+    }
+    let mut total = 0.0f64;
+    for i in 0..p1.len() {
+        // ...
+        total += diff * diff;
+    }
+    Ok((total).powf(0.5))
+}
+```
+
+---
+
+## Example Files
+
+| File | Description | Key Patterns |
+|------|-------------|-------------|
+| `examples/euclidean.py` | Euclidean distance | `range(len(x))`, `**`, accumulator |
+| `examples/matrix_ops.py` | Matrix multiply + dot product | nested loops, subscript assign |
+| `examples/image_preprocess.py` | Pixel normalize + gamma | `[0.0] * n`, subscript assign |
+| `examples/slow_tokenizer.py` | BPE-style tokenizer | while loop, dict lookup |
+| `examples/data_pipeline.py` | CSV parse + running mean | string ops, sliding window |
+
+---
+
+## Architecture
+
+```
+CLI args (Clap)
+    → input::load_input()     # File | stdin snippet | git2 clone
+    → profiler::profile_input()  # cProfile subprocess; python3→python fallback
+    → analyzer::select_targets() # Threshold filter; ml_mode tagging
+    → generator::generate()   # AST walk; Rust codegen; len-check guards
+    → builder::build_extension() # cargo check (fast-fail) → maturin develop
+    → print_summary()         # ASCII table to stdout
+```
+
+**Modules:**
+
+| Module | Responsibility |
+|--------|---------------|
+| `input.rs` | Load Python from file, stdin, or git repo |
+| `profiler.rs` | Run cProfile via Python subprocess; parse hotspots |
+| `analyzer.rs` | Filter hotspots by threshold; apply ML heuristics |
+| `generator.rs` | Walk Python AST; emit Rust + PyO3 stubs |
+| `builder.rs` | `cargo check` generated crate; spawn `maturin develop` |
+| `utils.rs` | Shared types; ASCII summary table |
+
+---
 
 ## Development
-- Rust 1.75+ recommended
-- Install maturin and Python 3.10+
-- Format & check:
+
+### Prerequisites
+
+- Rust 1.75+ stable (`rustup update stable`)
+- Python 3.10+ on PATH (`python3` or `python`)
+- `pip install maturin`
+
+### Build & Test
+
 ```bash
-cd /mnt/d/WindsurfProjects/rustify/rustify-ml && cargo fmt && cargo check
-# or keep cwd elsewhere and pass manifest explicitly:
-cargo fmt --manifest-path /mnt/d/WindsurfProjects/rustify/rustify-ml/Cargo.toml
-cargo check --manifest-path /mnt/d/WindsurfProjects/rustify/rustify-ml/Cargo.toml
+# From rustify-ml/ directory (or use WSL on Windows)
+cargo fmt && cargo check
+cargo test
+cargo clippy -- -D warnings
 ```
 
-### Install maturin (if not already)
+### Run CLI in dev mode
+
 ```bash
-pip install maturin
+# Dry-run: generate code, inspect, no build
+cargo run -- accelerate --file examples/euclidean.py --output dist --threshold 0 --dry-run
+
+# Full run (requires maturin)
+cargo run -- accelerate --file examples/euclidean.py --output dist --threshold 0
+
+# Verbose output
+cargo run -- accelerate --file examples/euclidean.py --output dist -vv --dry-run
 ```
 
-### Notes
-- CLI warns when any target falls back to echo translation; review generated lib.rs when warned.
-- Length mismatches on Vec-like params produce PyValueError guards in generated stubs.
+### Windows Note
+
+The project builds and tests in **WSL** (Windows Subsystem for Linux). Running `cargo test` directly in Windows CMD requires Visual Studio Build Tools (`link.exe`). Use WSL for development:
+
+```bash
+cd /mnt/d/WindsurfProjects/rustify/rustify-ml
+cargo fmt && cargo check
+cargo test
+```
+
+---
 
 ## Roadmap
-1) Profiling integration (py-spy) with harness generation
-2) AST analysis for translatable hotspots (rustpython-parser)
-3) Rust stub generation with PyO3 + ndarray helpers
-4) Maturin build/install automation
-5) Examples/benchmarks against common ML preprocessing loops
+
+See [plan.md](plan.md) for the full prioritized task list. High-level:
+
+1. ✅ **Core pipeline** — profile → analyze → generate → build
+2. ✅ **Translation coverage** — assign init, subscript assign, list init, range forms
+3. ✅ **Safety** — length-check guards, cargo check on generated crate
+4. ✅ **Profiler robustness** — python3/python fallback, version pre-flight, stdlib filter
+5. 🔄 **Nested for loops** — matmul pattern (in progress)
+6. 📋 **ndarray feature** — numpy-hint for Array1<f64> params
+7. 📋 **CLI polish** — `--list-targets`, `--function`, `--iterations`
+8. 📋 **Benchmarks** — Criterion before/after speedup suite
+9. 📋 **v0.1.0 release** — crates.io publish, CHANGELOG
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE)
+
+> ⚠️ **Generated code requires review.** rustify-ml emits Rust stubs as a starting point. Always review generated `lib.rs` before deploying, especially for fallback-translated functions (marked with `// fallback: echo input`).

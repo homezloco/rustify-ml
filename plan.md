@@ -1,124 +1,161 @@
-﻿# rustify-ml: Build Plan (Current)
+﻿# rustify-ml: Complete Build Plan
 
-## 1. Current State Snapshot
+## Polyglot Profiler and Accelerator - Python to Rust Bridge for AI/ML
+
+---
+
+## 1. Current State Snapshot (Updated 2026-02-18)
 
 | File | Status | Notes |
 |------|--------|-------|
-| src/main.rs | Done | Clap CLI, tracing, accelerate flow wired (input→profile→targets→generate→build) |
-| src/input.rs | Done | File/stdin; git clone+path supported |
-| src/utils.rs | Done | InputSource, ProfileSummary, TargetSpec, GenerationResult (fallback count) |
-| src/profiler.rs | Working | cProfile subprocess → hotspots filtered by threshold |
-| src/analyzer.rs | Working | Select targets by hotspot pct with ml_mode tag |
-| src/generator.rs | Working | rustpython-parser Suite::parse; type inference (int→usize, float→f64, numpy/torch hints→Vec<f64>); range/len/binop/pow translation; len checks; fallback tracking; unit tests added |
-| src/builder.rs | Working | maturin develop --release; logs fallback count |
-| Cargo.toml | Updated | anyhow, clap, tracing, git2, rustpython-parser, heck, tempfile; (ndarray/tch not yet added) |
-| tests | Partial | Generator unit tests (range/len, pow, len-check); no integration yet |
+| src/main.rs | ✅ Done | Clap CLI; lib crate imports; AccelerateRow summary table |
+| src/lib.rs | ✅ Done | Public lib crate; exposes all modules for integration tests |
+| src/input.rs | ✅ Done | File + stdin + git2 clone |
+| src/utils.rs | ✅ Done | InputSource, Hotspot, ProfileSummary, TargetSpec, GenerationResult, AccelerateRow, print_summary |
+| src/profiler.rs | ✅ Done | cProfile harness; detect_python (python3→python); version pre-flight; stdlib filter |
+| src/analyzer.rs | ✅ Done | Hotspot threshold filter; ml_mode reason tagging |
+| src/generator.rs | ✅ Done | AST walk; assign init; subscript assign; list init; range(a,b); infer_assign_type; translate_for_iter; constant_to_rust; len-check guards; fallback tracking |
+| src/builder.rs | ✅ Done | cargo_check_generated (fast-fail); maturin develop subprocess |
+| Cargo.toml | ✅ Done | lib + bin targets; all deps; optional ndarray/tch features |
+| tests/integration.rs | ✅ Done | 8 integration tests for generate() pipeline |
+| tests/integration_cli.rs | ✅ Done | 3 CLI end-to-end tests (dry-run; python_available guard) |
+| examples/euclidean.py | ✅ Done | Euclidean distance with __main__ block for profiler |
+| examples/slow_tokenizer.py | ✅ Done | BPE tokenizer loop fixture |
+| examples/matrix_ops.py | ✅ Done | matmul + dot_product fixtures |
+| examples/image_preprocess.py | ✅ Done | normalize_pixels + apply_gamma fixtures |
+| examples/data_pipeline.py | ✅ Done | CSV parsing + running_mean + zscore fixtures |
+| .github/workflows/ci.yml | ✅ Done | dtolnay/rust-toolchain; Python 3.11; maturin; 3-OS matrix; cargo cache |
+| README.md | ✅ Done | Full docs: usage, CLI ref, translation table, architecture, roadmap |
+| plan.md | ✅ Done | This file |
 
-## 2. Architecture Flow (Actual)
-
-CLI → input::load_input (file/snippet/git) → profiler (cProfile) → analyzer::select_targets → generator::generate (PyO3 crate, len guards, fallback logging) → builder::build_extension (maturin).
-
-## 3. Prioritized Tasks (Next)
-1) Translation robustness + explicit euclidean win: ensure 0 fallbacks for pure-Python euclidean_distance (len guard → PyValueError, for i in 0..len, total += diff*diff, return powf(0.5)); broaden binops/returns and reduce fallbacks overall.
-2) Tests & fixtures: add examples/euclidean.py; integration test (dry-run snapshot OK); expand unit coverage for translate_body/expr (range loop/binop/return).
-3) CLI warnings/summary: surface fallback_functions prominently in accelerate output; remind users to review generated code; include install hint when build succeeds.
-4) Type/signature polish: optional ndarray hint when numpy detected; better slice types for Vec-like params; consider GIL release for loop-heavy code.
-5) Docs/CI: README demo with before/after timing; GitHub Actions (fmt/clippy/test); prep release artifacts.
-6) Performance polish: profiling duration/rate flags; cache temp dirs; parallel generation for multiple targets.
-
-## 4. Dependencies (current + upcoming)
-- Current: anyhow, clap, tracing, tracing-subscriber, tempfile, git2, rustpython-parser (pin 0.4.0; legacy but stable), heck.
-- Upcoming (as needed): quote/syn/prettyplease (cleaner codegen/formatting), ndarray (numpy paths), tch (optional torch), serde/serde_json (config/reporting), criterion (bench).
-- Parser note: rustpython-parser 0.4.0 is legacy; if modern syntax issues arise (3.11+), evaluate ruff_python_parser post-MVP.
-
-## 5. Notes
-- Profiling uses cProfile (py-spy skipped for Windows privilege issues).
-- Fallbacks are logged; generator tracks count and builder reports it.
-- Profiling harness: keep stdout JSON/log approach for Stats; avoid binary .prof parsing; ensure parsing of printed stats/JSON is robust.
+**Build status:** `cargo fmt && cargo check` passes (verified in WSL 2026-02-18)
 
 ---
 
-## 4. Module Implementation Plan
+## 2. Architecture Flow
 
-### 4.1 src/utils.rs - Expand Shared Types
-
-    pub struct Hotspot { func_name, module, line_start, line_end, pct_time: f32, call_count: u64 }
-    pub struct Translatable { hotspot, params: Vec<ParamHint>, return_hint: TypeHint, ml_hints: MlHints, body_complexity: Complexity }
-    pub enum TypeHint { Float64, Int64, Bool, Str, ListOf(Box<TypeHint>), NdArray { dtype, ndim }, Unknown }
-    pub struct MlHints { uses_numpy, uses_torch, uses_sklearn, is_pure, has_inner_loop: bool }
-    pub enum Complexity { Simple, Moderate, Complex }
-
-### 4.2 src/profiler.rs - cProfile Harness
-
-Strategy: Write temp Python harness, run N times, dump cProfile stats to JSON, parse in Rust.
-
-    pub fn profile_code(source: &InputSource, threshold: f32) -> Result<Vec<Hotspot>>
-    fn write_harness(code: &str, func_name: &str, temp_dir: &Path) -> Result<PathBuf>
-    fn run_python_harness(harness_path: &Path) -> Result<String>
-    fn parse_profile_output(json: &str, threshold: f32) -> Result<Vec<Hotspot>>
-
-Harness template: import cProfile json sys; pr.enable(); for _ in range(100): func_call; pr.disable(); print(json.dumps(stats))
-Windows: use python not python3; detect via where python at startup.
-
-### 4.3 src/analyzer.rs - AST Analysis
-
-Strategy: Use rustpython-parser to parse Python source into AST, walk to find hotspot functions.
-
-    pub fn analyze_hotspots(source: &str, hotspots: &[Hotspot], ml_mode: bool) -> Result<Vec<Translatable>>
-    fn find_function_at_line / infer_param_types / check_purity / detect_ml_hints / score_complexity
-
-Heuristics: import numpy/torch/sklearn -> flags; StmtFor in body -> has_inner_loop; no eval/exec -> is_pure
-
-### 4.4 src/generator.rs - Rust + PyO3 Codegen
-
-Strategy: Use quote! macro for token streams, prettyplease for formatting.
-
-    pub fn generate_stubs(translatables: &[Translatable], output_dir: &Path, dry_run: bool) -> Result<GeneratedOutput>
-    pub struct GeneratedOutput { lib_rs, cargo_toml, python_wrapper, functions: Vec<String> }
-
-Generated lib.rs: #[pyfunction] fn func_rs(py: Python, input: Vec<f64>) -> PyResult<Vec<f64>>
-ML-smart: uses_numpy -> ndarray + Array1<f64>; has_inner_loop -> py.allow_threads()
-
-### 4.5 src/builder.rs - Maturin Integration
-
-    pub fn build_extension(output_dir: &Path, dry_run: bool) -> Result<BuildResult>
-    pub struct BuildResult { success, wheel_path, install_cmd, elapsed_secs }
-
-Maturin: Command::new(maturin).args([develop,--release]).current_dir(output_dir).output()
-Pre-flight: check maturin version; check python >= 3.10; check Cargo.toml exists
-
-### 4.6 src/input.rs - Git Mode
-
-    fn clone_git_repo(url, path) -> Result<InputSource>
-    // tempfile::TempDir auto-cleans on drop; Repository::clone(url, temp_dir.path())
-    // InputSource::Git { url, code, _temp: TempDir }
+```
+CLI args (Clap)
+    → input::load_input()        # File | stdin snippet | git2 clone
+    → profiler::profile_input()  # cProfile subprocess; python3→python fallback; stdlib filter
+    → analyzer::select_targets() # Threshold filter; ml_mode tagging
+    → generator::generate()      # AST walk; Rust codegen; len-check guards; fallback tracking
+    → builder::cargo_check_generated()  # Fast-fail: cargo check on generated crate
+    → builder::build_extension() # maturin develop --release
+    → utils::print_summary()     # ASCII table to stdout
+```
 
 ---
 
-## 5. Python to Rust Translation Patterns
+## 3. Prioritized Next Tasks
 
-| Python Pattern | Rust Translation | Crate |
-|----------------|-----------------|-------|
-| for x in list: acc+=f(x) | iter().map().sum() | std |
-| [f(x) for x in xs] | xs.iter().map(f).collect() | std |
-| np.array([...]) | Array1::from_vec(...) | ndarray |
-| np.dot(a, b) | a.dot(&b) | ndarray |
-| np.sum(arr) | arr.sum() | ndarray |
-| str.split().lower() | split_whitespace().map(to_lowercase) | std |
-| dict[key] = val | HashMap::insert(key, val) | std |
-| torch.tensor(data) | comment: use tch::Tensor | tch |
-| time.sleep(n) | thread::sleep(Duration::from_secs(n)) | std |
+### Task 1 (CRITICAL): Translation Robustness — Zero Fallback Demo
+- [x] Translate Assign with float literal: `total = 0.0` → `let mut total: f64 = 0.0;`
+- [x] Translate subscript assign: `result[i] = val` → `result[i] = val;`
+- [x] Translate list init: `result = [0.0] * n` → `let mut result = vec![0.0f64; n];`
+- [x] Translate range two-arg form: `range(a, b)` → `a..b`
+- [x] Add `infer_assign_type()` helper (Float → `: f64`, Int → `: i64`)
+- [x] Add `translate_for_iter()` helper (range(n), range(a,b), fallback)
+- [x] Add unit tests: float_assign_init, subscript_assign, list_init, range_two_args, normalize_pixels
+- [x] Achieve 0 fallbacks on `examples/euclidean.py`
+- [ ] Verify 0 fallbacks on `dot_product` in `matrix_ops.py` (run `cargo test`)
+- [ ] Translate nested for loops: `for i in range(n): for j in range(n):` → nested for (matmul)
+- [ ] Achieve 0 or graceful partial fallback on `matmul` (nested loops)
 
-Untranslatable (warn + skip): eval(), exec(), getattr(), async def, class self mutation
+### Task 2 (HIGH): More Unit Tests
+- [ ] Add snapshot test: assert generated lib.rs matches expected golden file
+- [ ] Add unit test: translate_body for nested for loop (expect partial/fallback with clear comment)
+- [ ] Add profiler unit test with mock cProfile stdout output
+- [ ] Add integration test: normalize_pixels achieves 0 fallbacks with new list init + subscript assign
+
+### Task 3 (HIGH): CLI Polish
+- [ ] Add `--list-targets` flag: profile only, print hotspots, no generation
+- [ ] Add `--function` flag: manually specify function name (skip profiler)
+- [ ] Add `--iterations` flag (default 100): control profiler loop count
+- [ ] Optional: add `comfy-table = "7.1"` dep for pretty output
+
+### Task 4 (MEDIUM): Profiler Polish
+- [x] `python3` → `python` fallback (cross-platform)
+- [x] Python version pre-flight check (warn if < 3.10)
+- [x] Filter `<built-in>` and `<frozen>` frames from hotspot list
+- [ ] Add `--profile-only` flag: run profiler, print hotspots, exit
+
+### Task 5 (MEDIUM): ndarray Optional Feature
+- [ ] Trigger on `uses_numpy=true` AND param is `Vec<f64>` from np annotation
+- [ ] Generated signature: `PyReadonlyArray1<f64>` when ndarray feature active
+- [ ] Add ndarray to generated Cargo.toml when feature active
+- [ ] Add test: normalize_pixels with `--features numpy-hint` generates Array1 params
+
+### Task 6 (LOW): README + Demo
+- [x] Full README with usage, CLI ref, translation table, architecture, roadmap
+- [ ] Add timing demo section: before/after Python vs Rust for euclidean (actual numbers)
+- [ ] Add GIF/screenshot of CLI output
+- [ ] Add crates.io badge once published
+
+### Task 7 (LOW): Release Prep
+- [ ] Add `benches/speedup.rs` with Criterion before/after benchmarks
+- [ ] `cargo publish --dry-run` check
+- [ ] Write CHANGELOG.md
+- [ ] Tag v0.1.0 release
 
 ---
 
-## 6. Broader Ecosystem: High-Value Python to Rust Bridges
+## 4. Translation Patterns Reference
 
-Data Processing: pandas->polars (done); numpy loops->ndarray+rayon (our target); PIL->image crate (5-20x)
-Inference: ONNX->tract; Torch->tch-rs; custom attention->candle; embeddings->usearch
-Pipelines: asyncio->tokio+PyO3 (no GIL); multiprocessing->rayon (no pickle); requests->reqwest
-Embedded: maturin cross for ARM; scipy.signal->Rust DSP; ROS2->rclrs+PyO3
+| Python Pattern | Rust Translation | Status |
+|----------------|-----------------|--------|
+| `for i in range(len(x)):` | `for i in 0..x.len() {` | ✅ Done |
+| `total += a * b` | `total += a * b;` | ✅ Done |
+| `return x ** 0.5` | `return (x).powf(0.5);` | ✅ Done |
+| `a[i] - b[i]` | `a[i] - b[i]` | ✅ Done |
+| `total = 0.0` | `let mut total: f64 = 0.0;` | ✅ Done |
+| `result[i] = val` | `result[i] = val;` | ✅ Done |
+| `result = [0.0] * n` | `let mut result = vec![0.0f64; n];` | ✅ Done |
+| `range(a, b)` | `a..b` | ✅ Done |
+| `for i in range(n): for j...` | nested for loops | 🔄 In Progress |
+| `[f(x) for x in xs]` | `xs.iter().map(f).collect()` | 📋 Planned |
+| `np.array` params | `Array1<f64>` | 📋 Planned (numpy-hint feature) |
+
+**Untranslatable** (warn + skip): `eval()`, `exec()`, `getattr()`, `async def`, class self mutation
+
+---
+
+## 5. CLI Summary Table Format (Target Output)
+
+```
+Accelerated 3/4 targets (1 fallback)
+
+Func               | Line | % Time | Translation | Status
+-------------------+------+--------+-------------+---------
+euclidean          |  1   | 42.1%  | Full        | Success
+dot_product        |  18  | 31.8%  | Full        | Success
+matmul             |  7   | 20.4%  | Partial     | Fallback (nested loop)
+normalize_pixels   |  24  |  5.7%  | Full        | Success
+
+Generated: dist/rustify_ml_ext/
+Install:   cd dist/rustify_ml_ext && maturin develop --release
+```
+
+---
+
+## 6. Key Commands
+
+```bash
+# Build and test (run from rustify-ml/ in WSL)
+cargo fmt && cargo check
+cargo test
+cargo clippy -- -D warnings
+
+# Run CLI (dry-run: generate code, no build)
+cargo run -- accelerate --file examples/euclidean.py --output dist --threshold 0 --dry-run
+cargo run -- accelerate --file examples/matrix_ops.py --output dist --threshold 0 --dry-run
+cargo run -- accelerate --file examples/image_preprocess.py --output dist --ml-mode --dry-run
+
+# Install and use generated extension
+cd dist/rustify_ml_ext && maturin develop --release
+python -c "import rustify_ml_ext; print(rustify_ml_ext.euclidean([0.0,3.0,4.0],[0.0,0.0,0.0]))"
+# → 5.0
+```
 
 ---
 
@@ -126,83 +163,27 @@ Embedded: maturin cross for ARM; scipy.signal->Rust DSP; ROS2->rclrs+PyO3
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|-----------|--------|-----------|
-| py-spy needs elevated privileges on Windows | High | Medium | Use cProfile harness for MVP |
-| rustpython-parser API changes | Medium | Medium | Pin to 0.3.*; integration test |
-| Generated Rust does not compile | High | High | Default Vec<f64>+PyAny fallback; dry-run |
-| maturin not installed | High | High | Pre-flight check with install instructions |
+| Generated Rust does not compile | High | High | `cargo_check_generated()` fast-fail (done); dry-run mode; fallback tracking |
+| Nested loop translation complexity | High | Medium | Warn partial; suggest rayon in comment; matmul in progress |
+| maturin not installed | High | High | Clear error message with install hint |
+| python vs python3 command | Medium | Medium | `detect_python()` tries python3 first (done) |
+| Python version < 3.10 | Medium | Medium | `check_python_version()` warns if < 3.10 (done) |
+| rustpython-parser 0.4.0 API changes | Low | Medium | Pinned; integration tests catch regressions |
 | Complex Python fails analysis | High | Low | Warn+skip; translate simple functions only |
-| Windows path separators | Medium | Medium | Use Path::display() and forward slashes |
-| Python version mismatch | Medium | Medium | Detect version; warn if < 3.10 |
+| py-spy needs elevated privileges on Windows | High | Medium | cProfile harness used instead (done) |
 
 ---
 
-## 8. Implementation Milestones
+## 8. Windows Development Note
 
-### Milestone 1: Profiling (Week 1)
-- [ ] Add serde/serde_json to Cargo.toml
-- [ ] Implement write_harness() in profiler.rs
-- [ ] Implement run_python_harness() with process spawn
-- [ ] Implement parse_profile_output() -> Vec<Hotspot>
-- [ ] Wire profiler into main.rs accelerate flow
-- [ ] Test with examples/slow_tokenizer.py
+The project builds and tests in **WSL** (Windows Subsystem for Linux). Running `cargo test` directly in Windows CMD requires Visual Studio Build Tools (`link.exe`). Use WSL:
 
-### Milestone 2: AST Analysis (Week 2)
-- [ ] Add rustpython-parser to Cargo.toml
-- [ ] Implement analyze_hotspots() with AST walk
-- [ ] Add Hotspot, Translatable, TypeHint, MlHints to utils.rs
-- [ ] Implement import scanning for numpy/torch detection
-- [ ] Implement purity checker
-- [ ] Unit test with sample Python ASTs
-
-### Milestone 3: Code Generation (Week 3)
-- [ ] Add quote, proc-macro2, syn, prettyplease to Cargo.toml
-- [ ] Implement generate_stubs() with quote! templates
-- [ ] Generate lib.rs, Cargo.toml, Python wrapper
-- [ ] ML-smart: ndarray for numpy, allow_threads for loops
-- [ ] Implement --dry-run output (print to stdout)
-- [ ] Test generated code compiles with cargo check
-
-### Milestone 4: Build Integration (Week 4)
-- [ ] Implement check_maturin_installed() pre-flight
-- [ ] Implement run_maturin_develop() subprocess
-- [ ] Add before/after timing benchmark
-- [ ] Wire full pipeline: input -> profile -> analyze -> gen -> build
-- [ ] End-to-end test: slow_tokenizer.py -> installed accel_rs module
-
-### Milestone 5: Polish and Release (Week 5-6)
-- [ ] Add git2 support for --git flag
-- [ ] GitHub Actions CI (Linux/macOS/Windows)
-- [ ] Criterion benchmarks in benches/
-- [ ] Publish to crates.io
-- [ ] Demo: accelerate HuggingFace tokenizer example
-- [ ] Post to r/rust, r/MachineLearning, Hacker News
+```bash
+cd /mnt/d/WindsurfProjects/rustify/rustify-ml
+cargo fmt && cargo check   # ✅ verified passing
+cargo test
+```
 
 ---
 
-## 9. Quick Reference: Key Commands
-
-    cargo build
-    cargo run -- accelerate --file examples/slow_tokenizer.py --output dist
-    cargo run -- accelerate --snippet --output dist < snippet.py
-    cargo test && cargo clippy -- -D warnings && cargo fmt
-    cargo add rustpython-parser@0.3 quote proc-macro2 prettyplease ndarray serde_json
-    cargo add syn --features full,parsing
-    cargo add git2 --no-default-features --features https
-    cargo add serde --features derive
-    pip install maturin
-
----
-
-## 10. Target File Structure
-
-    rustify-ml/
-    +-- Cargo.toml / plan.md / README.md / .gitignore
-    +-- .github/workflows/ci.yml
-    +-- src/ main.rs input.rs profiler.rs analyzer.rs generator.rs builder.rs utils.rs
-    +-- tests/ test_profiler.rs test_analyzer.rs test_generator.rs test_builder.rs
-    +-- examples/ slow_tokenizer.py image_preprocess.py matrix_ops.py data_pipeline.py
-    +-- benches/ speedup.rs
-
----
-
-*Generated by rustify-ml plan - last updated 2026-02-18*
+*Updated 2026-02-18 — cargo fmt && cargo check passes; translation coverage expanded; cargo check on generated crate; README fully updated*

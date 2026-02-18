@@ -112,6 +112,30 @@ fn main() -> Result<()> {
             let targets = analyzer::select_targets(&profile, threshold, ml_mode);
             let generation = generator::generate(&source, &targets, &output, dry_run)?;
             builder::build_extension(&generation, dry_run)?;
+
+            // Build summary rows from targets + generation result
+            let summary_rows: Vec<utils::AccelerateRow> = targets
+                .iter()
+                .enumerate()
+                .map(|(i, t)| {
+                    let is_fallback = i < generation.generated_functions.len()
+                        && generation.generated_functions[i].contains("// fallback");
+                    utils::AccelerateRow {
+                        func: t.func.clone(),
+                        line: t.line,
+                        pct_time: t.percent,
+                        translation: if is_fallback { "Partial" } else { "Full" },
+                        status: if is_fallback {
+                            "Fallback: echo input".to_string()
+                        } else {
+                            "Success".to_string()
+                        },
+                    }
+                })
+                .collect();
+
+            utils::print_summary(&summary_rows, &generation.crate_dir);
+
             if generation.fallback_functions > 0 {
                 warn!(
                     input_kind,
@@ -126,15 +150,7 @@ fn main() -> Result<()> {
                 fallback_functions = generation.fallback_functions,
                 "accelerate flow completed"
             );
-            if !dry_run {
-                info!(
-                    install_hint = format!(
-                        "Generated crate at {}. Run `maturin develop --release` if not already installed.",
-                        output.display()
-                    ),
-                    "installation hint"
-                );
-            } else {
+            if dry_run {
                 info!("dry-run completed; no install performed");
             }
         }

@@ -78,6 +78,49 @@ pub fn materialize_input(source: &InputSource) -> Result<(PathBuf, TempDir)> {
     Ok((path, tmpdir))
 }
 
+/// One row in the post-generation summary table printed to stdout.
+#[derive(Debug, Clone)]
+pub struct AccelerateRow {
+    pub func: String,
+    pub line: u32,
+    pub pct_time: f32,
+    pub translation: &'static str, // "Full" | "Partial"
+    pub status: String,            // "Success" | "Fallback: <reason>"
+}
+
+/// Print a simple ASCII summary table to stdout.
+pub fn print_summary(rows: &[AccelerateRow], crate_dir: &std::path::Path) {
+    let total = rows.len();
+    let fallbacks = rows.iter().filter(|r| r.translation == "Partial").count();
+    println!();
+    println!(
+        "Accelerated {}/{} targets ({} fallback{})",
+        total - fallbacks,
+        total,
+        fallbacks,
+        if fallbacks == 1 { "" } else { "s" }
+    );
+    println!();
+    println!(
+        "{:<22} | {:>4} | {:>6} | {:<11} | {}",
+        "Func", "Line", "% Time", "Translation", "Status"
+    );
+    println!("{}", "-".repeat(22 + 3 + 4 + 3 + 6 + 3 + 11 + 3 + 20));
+    for row in rows {
+        println!(
+            "{:<22} | {:>4} | {:>5.1}% | {:<11} | {}",
+            row.func, row.line, row.pct_time, row.translation, row.status
+        );
+    }
+    println!();
+    println!("Generated: {}", crate_dir.display());
+    println!(
+        "Install:   cd {} && maturin develop --release",
+        crate_dir.display()
+    );
+    println!();
+}
+
 pub fn extract_code(source: &InputSource) -> Result<String> {
     match source {
         InputSource::File { code, .. } => Ok(code.clone()),
