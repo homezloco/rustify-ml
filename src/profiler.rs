@@ -54,9 +54,24 @@ fn check_python_version(python: &str) {
     }
 }
 
+/// Profile Python code with a configurable iteration count.
+/// Wraps `profile_input_core` with the given loop count.
+pub fn profile_input_with_iterations(
+    source: &InputSource,
+    threshold: f32,
+    iterations: u32,
+) -> Result<ProfileSummary> {
+    profile_input_core(source, threshold, iterations)
+}
+
 /// Profile Python code using the built-in cProfile via a Python subprocess.
-/// Parses cumulative time percentages into Hotspot records.
+/// Uses a default of 100 iterations.
 pub fn profile_input(source: &InputSource, threshold: f32) -> Result<ProfileSummary> {
+    profile_input_core(source, threshold, 100)
+}
+
+/// Core profiling implementation.
+fn profile_input_core(source: &InputSource, threshold: f32, iterations: u32) -> Result<ProfileSummary> {
     let python = detect_python()?;
     check_python_version(&python);
 
@@ -66,9 +81,11 @@ pub fn profile_input(source: &InputSource, threshold: f32) -> Result<ProfileSumm
     let profiler = format!(
         r#"
 import cProfile, pstats, runpy
+_iters = {iterations}
 prof = cProfile.Profile()
 prof.enable()
-runpy.run_path(r"{path}", run_name="__main__")
+for _ in range(_iters):
+    runpy.run_path(r"{path}", run_name="__main__")
 prof.disable()
 stats = pstats.Stats(prof)
 total = sum(v[3] for v in stats.stats.values()) or 1e-9

@@ -121,6 +121,28 @@ pub fn print_summary(rows: &[AccelerateRow], crate_dir: &std::path::Path) {
     println!();
 }
 
+/// Print a hotspot table to stdout (used by --list-targets).
+pub fn print_hotspot_table(hotspots: &[Hotspot]) {
+    println!();
+    if hotspots.is_empty() {
+        println!("No hotspots found above threshold.");
+        println!();
+        return;
+    }
+    println!("Hotspots (ranked by CPU time):");
+    println!();
+    println!("{:<30} | {:>4} | {:>7}", "Function", "Line", "% Time");
+    println!("{}", "-".repeat(30 + 3 + 4 + 3 + 7));
+    for h in hotspots {
+        println!("{:<30} | {:>4} | {:>6.2}%", h.func, h.line, h.percent);
+    }
+    println!();
+    println!(
+        "Run with --threshold <N> to filter; use --function <name> to target one directly."
+    );
+    println!();
+}
+
 pub fn extract_code(source: &InputSource) -> Result<String> {
     match source {
         InputSource::File { code, .. } => Ok(code.clone()),

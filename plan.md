@@ -69,11 +69,12 @@ CLI args (Clap)
 - [ ] Add profiler unit test with mock cProfile stdout output
 - [ ] Add integration test: normalize_pixels achieves 0 fallbacks with new list init + subscript assign
 
-### Task 3 (HIGH): CLI Polish
-- [ ] Add `--list-targets` flag: profile only, print hotspots, no generation
-- [ ] Add `--function` flag: manually specify function name (skip profiler)
-- [ ] Add `--iterations` flag (default 100): control profiler loop count
-- [ ] Optional: add `comfy-table = "7.1"` dep for pretty output
+### Task 3 (HIGH): CLI Polish ✅
+- [x] Add `--list-targets` flag: profile only, print hotspots, no generation
+- [x] Add `--function` flag: manually specify function name (skip profiler)
+- [x] Add `--iterations` flag (default 100): control profiler loop count
+- [x] `print_hotspot_table()` added to utils.rs
+- [x] `profile_input_with_iterations()` added to profiler.rs
 
 ### Task 4 (MEDIUM): Profiler Polish
 - [x] `python3` → `python` fallback (cross-platform)

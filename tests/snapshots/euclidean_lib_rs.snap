@@ -1,0 +1,5 @@
+use pyo3::prelude::*;
+
+#[pyfunction]
+/// Auto-generated from Python hotspot `euclidean` at line 1 (100.00%): integration test
+pub fn euclidean(py: Python, p1: Vec<f64>, p2: Vec<f64>) -> PyResult<f64> {

@@ -54,6 +54,15 @@ enum Commands {
         /// After building, run a Python timing harness and print speedup vs original
         #[arg(long, default_value_t = false)]
         benchmark: bool,
+        /// Profile only: print hotspot table and exit without generating code
+        #[arg(long, default_value_t = false)]
+        list_targets: bool,
+        /// Skip profiler and target a specific function by name
+        #[arg(long)]
+        function: Option<String>,
+        /// Number of profiler loop iterations (default: 100)
+        #[arg(long, default_value_t = 100u32)]
+        iterations: u32,
     },
 }
 
@@ -87,6 +96,9 @@ fn main() -> Result<()> {
             ml_mode,
             dry_run,
             benchmark,
+            list_targets,
+            function,
+            iterations,
         } => {
             info!(
                 ?file,
@@ -98,6 +110,9 @@ fn main() -> Result<()> {
                 ml_mode,
                 dry_run,
                 benchmark,
+                list_targets,
+                ?function,
+                iterations,
                 "starting accelerate"
             );
             let source = input::load_input(
@@ -113,9 +128,34 @@ fn main() -> Result<()> {
                     format!("git:{}:{}", repo, path.display())
                 }
             };
-            let profile = profiler::profile_input(&source, threshold)?;
-            let targets = analyzer::select_targets(&profile, threshold, ml_mode);
-            let generation = generator::generate(&source, &targets, &output, dry_run)?;
+
+            // --list-targets: profile only, print hotspot table, exit
+            if list_targets {
+                let profile = profiler::profile_input(&source, threshold)?;
+                utils::print_hotspot_table(&profile.hotspots);
+                info!(input_kind, "list-targets completed");
+                return Ok(());
+            }
+
+            // Determine targets: --function bypasses profiler entirely
+            let targets = if let Some(ref func_name) = function {
+                info!(func = %func_name, "using --function: skipping profiler");
+                vec![utils::TargetSpec {
+                    func: func_name.clone(),
+                    line: 1,
+                    percent: 100.0,
+                    reason: "--function flag".to_string(),
+                }]
+            } else {
+                let profile = profiler::profile_input_with_iterations(&source, threshold, iterations)?;
+                analyzer::select_targets(&profile, threshold, ml_mode)
+            };
+
+            let generation = if ml_mode {
+                generator::generate_ml(&source, &targets, &output, dry_run)?
+            } else {
+                generator::generate(&source, &targets, &output, dry_run)?
+            };
             builder::build_extension(&generation, dry_run)?;
 
             // Optional benchmark: run Python timing harness and print speedup

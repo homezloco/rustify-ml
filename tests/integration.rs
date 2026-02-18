@@ -198,6 +198,67 @@ fn integration_multiple_targets_same_file() {
     assert!(lib_rs.contains("fn matmul"), "missing matmul");
 }
 
+// ── golden file snapshot ──────────────────────────────────────────────────────
+
+/// Golden file test: assert the generated lib.rs for euclidean.py contains all
+/// expected structural elements. Update the snapshot by running:
+///   UPDATE_SNAPSHOTS=1 cargo test integration_euclidean_golden
+#[test]
+fn integration_euclidean_golden() {
+    let (_, source) = load_example("euclidean.py");
+    let targets = vec![TargetSpec {
+        func: "euclidean".to_string(),
+        line: 1,
+        percent: 100.0,
+        reason: "integration test".to_string(),
+    }];
+    let tmp = tempdir().expect("tempdir");
+    generate(&source, &targets, tmp.path(), false).expect("generate failed");
+
+    let lib_rs =
+        std::fs::read_to_string(tmp.path().join("rustify_ml_ext/src/lib.rs")).expect("read lib.rs");
+
+    // Structural invariants that must always hold
+    let required = [
+        "use pyo3::prelude::*;",
+        "#[pyfunction]",
+        "pub fn euclidean(",
+        "py: Python",
+        "Vec<f64>",
+        "PyResult<f64>",
+        "for i in 0..",
+        "powf(",
+        "#[pymodule]",
+        "fn rustify_ml_ext(",
+        "wrap_pyfunction!(euclidean",
+    ];
+    for pat in &required {
+        assert!(
+            lib_rs.contains(pat),
+            "golden snapshot missing pattern {:?}\n\nActual lib.rs:\n{}",
+            pat,
+            lib_rs
+        );
+    }
+
+    // Snapshot file: write if UPDATE_SNAPSHOTS=1, else compare prefix
+    let snap_path = std::path::PathBuf::from("tests/snapshots/euclidean_lib_rs.snap");
+    if std::env::var("UPDATE_SNAPSHOTS").is_ok() {
+        std::fs::create_dir_all(snap_path.parent().unwrap()).ok();
+        std::fs::write(&snap_path, &lib_rs).expect("write snapshot");
+        println!("Snapshot updated: {}", snap_path.display());
+    } else if snap_path.exists() {
+        let snap = std::fs::read_to_string(&snap_path).expect("read snapshot");
+        // Compare only the first 5 lines (header) to avoid fragile full-text matching
+        let snap_head: Vec<&str> = snap.lines().take(5).collect();
+        let actual_head: Vec<&str> = lib_rs.lines().take(5).collect();
+        assert_eq!(
+            snap_head, actual_head,
+            "golden snapshot header mismatch — run UPDATE_SNAPSHOTS=1 cargo test to refresh"
+        );
+    }
+}
+
 // ── pow translation ───────────────────────────────────────────────────────────
 
 #[test]

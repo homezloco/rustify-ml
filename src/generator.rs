@@ -9,11 +9,36 @@ use tracing::{info, warn};
 
 use crate::utils::{GenerationResult, InputSource, TargetSpec, extract_code};
 
+/// Whether the source code imports numpy (used for ndarray feature).
+fn detects_numpy(code: &str) -> bool {
+    code.contains("import numpy") || code.contains("from numpy") || code.contains("import np")
+}
+
 pub fn generate(
     source: &InputSource,
     targets: &[TargetSpec],
     output: &Path,
     dry_run: bool,
+) -> Result<GenerationResult> {
+    generate_with_options(source, targets, output, dry_run, false)
+}
+
+/// Extended generate with ml_mode flag for ndarray/numpy-hint support.
+pub fn generate_ml(
+    source: &InputSource,
+    targets: &[TargetSpec],
+    output: &Path,
+    dry_run: bool,
+) -> Result<GenerationResult> {
+    generate_with_options(source, targets, output, dry_run, true)
+}
+
+fn generate_with_options(
+    source: &InputSource,
+    targets: &[TargetSpec],
+    output: &Path,
+    dry_run: bool,
+    ml_mode: bool,
 ) -> Result<GenerationResult> {
     if targets.is_empty() {
         return Err(anyhow!("no targets selected for generation"));
@@ -29,6 +54,11 @@ pub fn generate(
     }
 
     let code = extract_code(source)?;
+    let use_ndarray = ml_mode && detects_numpy(&code);
+    if use_ndarray {
+        info!("numpy detected in source + ml_mode active: using PyReadonlyArray1<f64> params");
+    }
+
     let suite =
         Suite::parse(&code, "<input>").context("failed to parse Python input for generation")?;
     let stmts: &[Stmt] = suite.as_slice();
@@ -37,7 +67,7 @@ pub fn generate(
     let functions: Vec<String> = targets
         .iter()
         .map(|t| {
-            let (code, fallback) = render_function(t, stmts);
+            let (code, fallback) = render_function_with_options(t, stmts, use_ndarray);
             if fallback {
                 fallback_functions += 1;
             }
@@ -45,8 +75,8 @@ pub fn generate(
         })
         .collect();
 
-    let lib_rs = render_lib_rs(&functions);
-    let cargo_toml = render_cargo_toml();
+    let lib_rs = render_lib_rs_with_options(&functions, use_ndarray);
+    let cargo_toml = render_cargo_toml_with_options(use_ndarray);
 
     fs::write(crate_dir.join("src/lib.rs"), lib_rs).context("failed to write lib.rs")?;
     fs::write(crate_dir.join("Cargo.toml"), cargo_toml).context("failed to write Cargo.toml")?;
@@ -66,16 +96,35 @@ pub fn generate(
     })
 }
 
+#[allow(dead_code)]
 fn render_function(target: &TargetSpec, module: &[Stmt]) -> (String, bool) {
+    render_function_with_options(target, module, false)
+}
+
+fn render_function_with_options(target: &TargetSpec, module: &[Stmt], use_ndarray: bool) -> (String, bool) {
     let rust_name = target.func.to_snake_case();
-    let translation = translate_function_body(target, module).unwrap_or_else(|| Translation {
+    let mut translation = translate_function_body(target, module).unwrap_or_else(|| Translation {
         params: vec![("data".to_string(), "Vec<f64>".to_string())],
         return_type: "Vec<f64>".to_string(),
         body: "// fallback: echo input\n    Ok(data)".to_string(),
         fallback: true,
     });
 
-    let len_check = render_len_checks(&translation.params).unwrap_or_default();
+    // ndarray mode: replace Vec<f64> params with PyReadonlyArray1<f64>
+    if use_ndarray {
+        for (_, ty) in &mut translation.params {
+            if ty == "Vec<f64>" {
+                *ty = "numpy::PyReadonlyArray1<f64>".to_string();
+            }
+        }
+    }
+
+    let len_check = if use_ndarray {
+        // ndarray params use .as_slice()? for access; skip Vec-based len check
+        String::new()
+    } else {
+        render_len_checks(&translation.params).unwrap_or_default()
+    };
 
     let params_rendered = translation
         .params
@@ -84,10 +133,16 @@ fn render_function(target: &TargetSpec, module: &[Stmt]) -> (String, bool) {
         .collect::<Vec<_>>()
         .join(", ");
 
+    let ndarray_note = if use_ndarray {
+        "\n    // ndarray: use p1.as_slice()? to get &[f64] for indexing"
+    } else {
+        ""
+    };
+
     let rendered = format!(
         "#[pyfunction]\n\
     /// Auto-generated from Python hotspot `{orig}` at line {line} ({percent:.2}%): {reason}\n\
-pub fn {rust_name}(py: Python, {params}) -> PyResult<{ret}> {{\n    let _ = py; // reserved for future GIL use\n    {len_check}\n    {body}\n}}\n",
+pub fn {rust_name}(py: Python, {params}) -> PyResult<{ret}> {{{ndarray_note}\n    let _ = py; // reserved for future GIL use\n    {len_check}\n    {body}\n}}\n",
         orig = target.func,
         line = target.line,
         percent = target.percent,
@@ -96,6 +151,7 @@ pub fn {rust_name}(py: Python, {params}) -> PyResult<{ret}> {{\n    let _ = py; 
         ret = translation.return_type,
         body = translation.body,
         len_check = len_check,
+        ndarray_note = ndarray_note,
     );
 
     (rendered, translation.fallback)
@@ -877,6 +933,85 @@ def matmul(a, b, n):
     }
 
     #[test]
+    fn test_ndarray_mode_replaces_vec_params() {
+        // When use_ndarray=true, Vec<f64> params should become PyReadonlyArray1<f64>
+        let code = r#"
+import numpy as np
+
+def dot_product(a, b):
+    total = 0.0
+    for i in range(len(a)):
+        total += a[i] * b[i]
+    return total
+"#;
+        let source = InputSource::Snippet(code.to_string());
+        let targets = vec![TargetSpec {
+            func: "dot_product".to_string(),
+            line: 1,
+            percent: 100.0,
+            reason: "ndarray test".to_string(),
+        }];
+        let tmp = tempdir().expect("tempdir");
+        // generate_ml detects numpy import → use_ndarray=true
+        let result = generate_ml(&source, &targets, tmp.path(), false).expect("generate_ml failed");
+        let lib_rs =
+            std::fs::read_to_string(tmp.path().join("rustify_ml_ext/src/lib.rs")).expect("read lib.rs");
+        assert_eq!(result.fallback_functions, 0, "dot_product should not fallback in ml mode");
+        assert!(
+            lib_rs.contains("PyReadonlyArray1<f64>"),
+            "expected PyReadonlyArray1<f64> in ml mode, got:\n{}",
+            lib_rs
+        );
+        assert!(
+            lib_rs.contains("use numpy;"),
+            "expected 'use numpy;' import in ml mode, got:\n{}",
+            lib_rs
+        );
+        // Cargo.toml should include numpy dep
+        let cargo_toml =
+            std::fs::read_to_string(tmp.path().join("rustify_ml_ext/Cargo.toml")).expect("read Cargo.toml");
+        assert!(
+            cargo_toml.contains("numpy"),
+            "expected numpy dep in Cargo.toml for ml mode, got:\n{}",
+            cargo_toml
+        );
+    }
+
+    #[test]
+    fn test_ndarray_mode_no_numpy_import_stays_vec() {
+        // When ml_mode=true but no numpy import, params stay Vec<f64>
+        let code = r#"
+def dot_product(a, b):
+    total = 0.0
+    for i in range(len(a)):
+        total += a[i] * b[i]
+    return total
+"#;
+        let source = InputSource::Snippet(code.to_string());
+        let targets = vec![TargetSpec {
+            func: "dot_product".to_string(),
+            line: 1,
+            percent: 100.0,
+            reason: "ndarray test".to_string(),
+        }];
+        let tmp = tempdir().expect("tempdir");
+        let result = generate_ml(&source, &targets, tmp.path(), false).expect("generate_ml failed");
+        let lib_rs =
+            std::fs::read_to_string(tmp.path().join("rustify_ml_ext/src/lib.rs")).expect("read lib.rs");
+        assert_eq!(result.fallback_functions, 0);
+        assert!(
+            !lib_rs.contains("PyReadonlyArray1"),
+            "should NOT use PyReadonlyArray1 without numpy import, got:\n{}",
+            lib_rs
+        );
+        assert!(
+            lib_rs.contains("Vec<f64>"),
+            "expected Vec<f64> without numpy import, got:\n{}",
+            lib_rs
+        );
+    }
+
+    #[test]
     fn test_generate_integration_euclidean() {
         let example_path = PathBuf::from("examples/euclidean.py");
         let code = std::fs::read_to_string(&example_path).expect("read example");
@@ -899,7 +1034,12 @@ def matmul(a, b, n):
     }
 }
 
+#[allow(dead_code)]
 fn render_lib_rs(functions: &[String]) -> String {
+    render_lib_rs_with_options(functions, false)
+}
+
+fn render_lib_rs_with_options(functions: &[String], use_ndarray: bool) -> String {
     let fns_joined = functions.join("\n");
     let adders = functions
         .iter()
@@ -907,13 +1047,19 @@ fn render_lib_rs(functions: &[String]) -> String {
         .map(|name| format!("m.add_function(wrap_pyfunction!({name}, m)?)?;"))
         .collect::<Vec<_>>()
         .join("\n    ");
+    let ndarray_import = if use_ndarray {
+        "use numpy;\n"
+    } else {
+        ""
+    };
     format!(
-        "use pyo3::prelude::*;\n\n{fns_joined}\n\
+        "use pyo3::prelude::*;\n{ndarray_import}\n{fns_joined}\n\
 #[pymodule]\n\
 fn rustify_ml_ext(_py: Python, m: &PyModule) -> PyResult<()> {{\n\
     {adders}\n\
     Ok(())\n\
 }}\n",
+        ndarray_import = ndarray_import,
         fns_joined = fns_joined,
         adders = adders
     )
@@ -928,8 +1074,19 @@ fn extract_fn_name(func_src: &str) -> String {
         .to_string()
 }
 
+#[allow(dead_code)]
 fn render_cargo_toml() -> String {
-    "[package]\n\
+    render_cargo_toml_with_options(false)
+}
+
+fn render_cargo_toml_with_options(use_ndarray: bool) -> String {
+    let numpy_dep = if use_ndarray {
+        "numpy = \"0.21\"\n"
+    } else {
+        ""
+    };
+    format!(
+        "[package]\n\
 name = \"rustify_ml_ext\"\n\
 version = \"0.1.0\"\n\
 edition = \"2024\"\n\
@@ -939,6 +1096,8 @@ name = \"rustify_ml_ext\"\n\
 crate-type = [\"cdylib\"]\n\
 \n\
 [dependencies]\n\
-pyo3 = { version = \"0.21\", features = [\"extension-module\"] }\n"
-        .to_string()
+pyo3 = {{ version = \"0.21\", features = [\"extension-module\"] }}\n\
+{numpy_dep}",
+        numpy_dep = numpy_dep
+    )
 }
