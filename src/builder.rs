@@ -21,6 +21,10 @@ pub fn build_extension(r#gen: &GenerationResult, dry_run: bool) -> Result<()> {
         return Err(anyhow!("maturin build failed with status {status}"));
     }
 
-    info!(path = %r#gen.crate_dir.display(), "maturin build completed");
+    info!(
+        path = %r#gen.crate_dir.display(),
+        fallback_functions = r#gen.fallback_functions,
+        "maturin build completed"
+    );
     Ok(())
 }

@@ -7,7 +7,7 @@ mod utils;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use tracing::info;
+use tracing::{info, warn};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -112,10 +112,18 @@ fn main() -> Result<()> {
             let targets = analyzer::select_targets(&profile, threshold, ml_mode);
             let generation = generator::generate(&source, &targets, &output, dry_run)?;
             builder::build_extension(&generation, dry_run)?;
+            if generation.fallback_functions > 0 {
+                warn!(
+                    input_kind,
+                    fallback_functions = generation.fallback_functions,
+                    "some targets used fallback translation; review generated code"
+                );
+            }
             info!(
                 input_kind,
                 targets = targets.len(),
                 generated = generation.generated_functions.len(),
+                fallback_functions = generation.fallback_functions,
                 "accelerate flow completed"
             );
         }
