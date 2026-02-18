@@ -571,37 +571,35 @@ mod tests {
 
     #[test]
     fn test_expr_to_rust_range_and_len() {
-        let range_expr = Expr::Call(Box::new(rustpython_parser::ast::ExprCall {
-            func: Box::new(Expr::Name(Box::new(rustpython_parser::ast::ExprName {
+        let range_expr = Expr::Call(rustpython_parser::ast::ExprCall {
+            func: Box::new(Expr::Name(rustpython_parser::ast::ExprName {
                 range: TextRange::default(),
                 id: "range".into(),
                 ctx: rustpython_parser::ast::ExprContext::Load,
-            }))),
-            args: vec![Expr::Constant(Box::new(
-                rustpython_parser::ast::ExprConstant {
-                    range: TextRange::default(),
-                    value: rustpython_parser::ast::Constant::Int(10.into()),
-                    kind: None,
-                },
-            ))],
+            })),
+            args: vec![Expr::Constant(rustpython_parser::ast::ExprConstant {
+                range: TextRange::default(),
+                value: rustpython_parser::ast::Constant::Int(10.into()),
+                kind: None,
+            })],
             keywords: vec![],
             range: TextRange::default(),
-        }));
+        });
 
-        let len_expr = Expr::Call(Box::new(rustpython_parser::ast::ExprCall {
-            func: Box::new(Expr::Name(Box::new(rustpython_parser::ast::ExprName {
+        let len_expr = Expr::Call(rustpython_parser::ast::ExprCall {
+            func: Box::new(Expr::Name(rustpython_parser::ast::ExprName {
                 range: TextRange::default(),
                 id: "len".into(),
                 ctx: rustpython_parser::ast::ExprContext::Load,
-            }))),
-            args: vec![Expr::Name(Box::new(rustpython_parser::ast::ExprName {
+            })),
+            args: vec![Expr::Name(rustpython_parser::ast::ExprName {
                 range: TextRange::default(),
                 id: "a".into(),
                 ctx: rustpython_parser::ast::ExprContext::Load,
-            }))],
+            })],
             keywords: vec![],
             range: TextRange::default(),
-        }));
+        });
 
         assert_eq!(expr_to_rust(&range_expr), "0..10");
         assert_eq!(expr_to_rust(&len_expr), "a.len()");
@@ -609,22 +607,20 @@ mod tests {
 
     #[test]
     fn test_expr_to_rust_binop_pow() {
-        let bin = Expr::BinOp(Box::new(rustpython_parser::ast::ExprBinOp {
+        let bin = Expr::BinOp(rustpython_parser::ast::ExprBinOp {
             range: TextRange::default(),
-            left: Box::new(Expr::Name(Box::new(rustpython_parser::ast::ExprName {
+            left: Box::new(Expr::Name(rustpython_parser::ast::ExprName {
                 range: TextRange::default(),
                 id: "x".into(),
                 ctx: rustpython_parser::ast::ExprContext::Load,
-            }))),
+            })),
             op: Operator::Pow,
-            right: Box::new(Expr::Constant(Box::new(
-                rustpython_parser::ast::ExprConstant {
-                    range: TextRange::default(),
-                    value: rustpython_parser::ast::Constant::Int(2.into()),
-                    kind: None,
-                },
-            ))),
-        }));
+            right: Box::new(Expr::Constant(rustpython_parser::ast::ExprConstant {
+                range: TextRange::default(),
+                value: rustpython_parser::ast::Constant::Int(2.into()),
+                kind: None,
+            })),
+        });
         assert_eq!(expr_to_rust(&bin), "(x).powf(2)");
     }
 
@@ -740,27 +736,27 @@ def f(n):
     #[test]
     fn test_translate_for_iter_range_two_args() {
         // range(start, end) → start..end
-        let call = Expr::Call(Box::new(rustpython_parser::ast::ExprCall {
+        let call = Expr::Call(rustpython_parser::ast::ExprCall {
             range: TextRange::default(),
-            func: Box::new(Expr::Name(Box::new(rustpython_parser::ast::ExprName {
+            func: Box::new(Expr::Name(rustpython_parser::ast::ExprName {
                 range: TextRange::default(),
                 id: "range".into(),
                 ctx: rustpython_parser::ast::ExprContext::Load,
-            }))),
+            })),
             args: vec![
-                Expr::Constant(Box::new(rustpython_parser::ast::ExprConstant {
+                Expr::Constant(rustpython_parser::ast::ExprConstant {
                     range: TextRange::default(),
                     value: rustpython_parser::ast::Constant::Int(1.into()),
                     kind: None,
-                })),
-                Expr::Constant(Box::new(rustpython_parser::ast::ExprConstant {
+                }),
+                Expr::Constant(rustpython_parser::ast::ExprConstant {
                     range: TextRange::default(),
                     value: rustpython_parser::ast::Constant::Int(10.into()),
                     kind: None,
-                })),
+                }),
             ],
             keywords: vec![],
-        }));
+        });
         assert_eq!(translate_for_iter(&call), "1..10");
     }
 
