@@ -41,7 +41,10 @@ fn integration_nested_for_else_fallback() {
     let result = generate(&source, &targets, tmp.path(), false).expect("generate failed");
 
     assert_eq!(result.generated_functions.len(), 1);
-    assert!(result.fallback_functions > 0, "expected fallback for for..else construct");
+    assert!(
+        result.fallback_functions > 0,
+        "expected fallback for for..else construct"
+    );
 }
 
 // ── euclidean ────────────────────────────────────────────────────────────────
@@ -158,7 +161,10 @@ fn integration_matmul_zero_fallback() {
     let result = generate(&source, &targets, tmp.path(), false).expect("generate failed");
 
     assert_eq!(result.generated_functions.len(), 1);
-    assert_eq!(result.fallback_functions, 0, "matmul should fully translate without fallback");
+    assert_eq!(
+        result.fallback_functions, 0,
+        "matmul should fully translate without fallback"
+    );
 }
 
 // ── normalize_pixels (image_preprocess) ──────────────────────────────────────
@@ -197,7 +203,10 @@ fn integration_normalize_pixels_zero_fallback() {
     let result = generate(&source, &targets, tmp.path(), false).expect("generate failed");
 
     assert_eq!(result.generated_functions.len(), 1);
-    assert_eq!(result.fallback_functions, 0, "normalize_pixels should not fallback");
+    assert_eq!(
+        result.fallback_functions, 0,
+        "normalize_pixels should not fallback"
+    );
 }
 
 // ── dry_run writes files ──────────────────────────────────────────────────────

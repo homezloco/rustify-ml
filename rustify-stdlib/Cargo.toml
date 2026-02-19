@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2024"
 description = "Prebuilt Rust routines (PyO3) for Python acceleration"
 license = "MIT"
+repository = "https://github.com/your-org/rustify-ml"
+homepage = "https://github.com/your-org/rustify-ml"
+documentation = "https://github.com/your-org/rustify-ml"
+readme = "README.md"
 
 [lib]
 name = "rustify_stdlib"

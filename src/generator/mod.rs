@@ -361,7 +361,11 @@ def euclidean(p1, p2):
             reason: "test nested for".to_string(),
         };
         let t = translate_function_body(&target, suite.as_slice()).expect("no translation");
-        assert!(t.fallback, "expected fallback for for..else, got body:\n{}", t.body);
+        assert!(
+            t.fallback,
+            "expected fallback for for..else, got body:\n{}",
+            t.body
+        );
     }
 
     #[test]

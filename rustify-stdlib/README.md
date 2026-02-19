@@ -12,6 +12,17 @@ print(rs.euclidean([0.0,3.0,4.0],[0.0,0.0,0.0]))
 PY
 ```
 
+## Install (crates.io + pip)
+
+```bash
+pip install maturin
+pip install rustify-stdlib  # once published
+python - <<'PY'
+import rustify_stdlib as rs
+print(rs.dot_product([1.0,2.0],[3.0,4.0]))
+PY
+```
+
 ## Functions
 - euclidean(p1, p2) -> float
 - dot_product(a, b) -> float
