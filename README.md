@@ -3,8 +3,8 @@
 > **Auto-accelerate Python ML hotspots with Rust.** Profile → Identify → Generate → Build — drop-in PyO3 extensions with no manual rewrite.
 
 [![CI](https://github.com/your-org/rustify-ml/actions/workflows/ci.yml/badge.svg)](https://github.com/your-org/rustify-ml/actions)
+[![crates.io](https://img.shields.io/crates/v/rustify-ml.svg)](https://crates.io/crates/rustify-ml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-<!-- TODO: add crates.io badge after publish -->
 
 ---
 
