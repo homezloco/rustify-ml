@@ -91,20 +91,25 @@ CLI args (Clap)
 
 ### Task 6 (LOW): README + Demo
 - [x] Full README with usage, CLI ref, translation table, architecture, roadmap
-- [ ] Add timing demo section: before/after Python vs Rust for euclidean (actual numbers)
-- [ ] Add GIF/screenshot of CLI output
-- [ ] Add crates.io badge once published
+- [x] Add timing demo section: before/after Python vs Rust for euclidean (actual numbers)
+- [x] Add GIF/screenshot of CLI output
+- [x] Add crates.io badge once published
 
 ### Task 7 (LOW): Release Prep
 - [x] Add `benches/speedup.rs` with Criterion before/after benchmarks
-- [ ] `cargo publish --dry-run` check
+- [x] `cargo publish --dry-run` check
 - [x] Write CHANGELOG.md
-- [ ] Tag v0.1.0 release
+- [x] Tag v0.1.0 release
 
 ### Task 8 (MEDIUM): rustify-stdlib packaging
 - [x] Add `rustify-stdlib/` crate to workspace and maturin config
 - [x] Add Python usage example (maturin develop) and parity tests at crate level
 - [ ] Publish/push once wired; share import snippet
+
+### Remaining Priority List (short)
+1) Publish/push rustify-stdlib and document import snippet.
+2) Capture/retain clean generated crate snapshot (avoid fallback artifacts) for demos.
+3) Optional: add more CLI demos (matrix_ops/image_preprocess) if desired.
 
 ---
 
