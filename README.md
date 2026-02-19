@@ -343,7 +343,7 @@ See [plan.md](plan.md) for the full prioritized task list. High-level:
 8. ✅ **BPE tokenizer fixture** — `examples/bpe_tokenizer.py` + integration tests
 9. ✅ **Benchmark script** — `benches/compare.py` (Python baseline + `--with-rust` mode)
 10. ✅ **List comprehension** — `[f(x) for x in xs]` → `xs.iter().map(f).collect()`
-11. ✅ **Criterion benchmarks** — `benches/speedup.rs` scaffold with Criterion (html reports)
+11. ✅ **Criterion benchmarks** — `benches/speedup.rs` with Criterion (html reports; euclidean/dot_product/moving_average)
 12. 📋 **v0.1.0 release** — crates.io publish, CHANGELOG, GitHub release (see CHANGELOG.md)
 
 ---
