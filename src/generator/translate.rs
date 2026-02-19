@@ -120,43 +120,6 @@ pub(super) fn translate_body_inner(body: &[Stmt], depth: usize) -> Option<BodyTr
     let indent = "    ".repeat(depth);
     let mut var_types: HashMap<String, &str> = HashMap::new();
 
-    // Fast path: single for-loop with range(n) at top level
-    if depth == 1
-        && let Stmt::For(for_stmt) = &body[0]
-        && let Expr::Call(call) = for_stmt.iter.as_ref()
-        && let Expr::Name(func) = call.func.as_ref()
-        && func.id.as_str() == "range"
-        && call.args.len() == 1
-    {
-        let iter_expr = expr_to_rust(&call.args[0]);
-        let loop_var = if let Expr::Name(n) = for_stmt.target.as_ref() {
-            n.id.to_string()
-        } else {
-            "i".to_string()
-        };
-
-        let translated_loop_body = translate_body_inner(for_stmt.body.as_slice(), depth + 1)
-            .map(|b| b.body)
-            .unwrap_or_else(|| {
-                format!(
-                    "// TODO: translate loop body\n        total += ({loop_var} as f64) * ({loop_var} as f64);"
-                )
-            });
-
-        let body_str = format!(
-            "let mut total = 0.0f64;\n    for {loop_var} in 0..{iter} {{\n        {translated_loop_body}\n    }}\n    Ok(total)",
-            loop_var = loop_var,
-            iter = iter_expr,
-            translated_loop_body = translated_loop_body
-        );
-
-        return Some(BodyTranslation {
-            return_type: "f64".to_string(),
-            body: body_str,
-            fallback: false,
-        });
-    }
-
     // Generic sequential statement translation
     let mut out = String::new();
     let mut had_unhandled = false;
