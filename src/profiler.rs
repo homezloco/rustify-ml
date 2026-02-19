@@ -71,7 +71,11 @@ pub fn profile_input(source: &InputSource, threshold: f32) -> Result<ProfileSumm
 }
 
 /// Core profiling implementation.
-fn profile_input_core(source: &InputSource, threshold: f32, iterations: u32) -> Result<ProfileSummary> {
+fn profile_input_core(
+    source: &InputSource,
+    threshold: f32,
+    iterations: u32,
+) -> Result<ProfileSummary> {
     let python = detect_python()?;
     check_python_version(&python);
 

@@ -147,7 +147,8 @@ fn main() -> Result<()> {
                     reason: "--function flag".to_string(),
                 }]
             } else {
-                let profile = profiler::profile_input_with_iterations(&source, threshold, iterations)?;
+                let profile =
+                    profiler::profile_input_with_iterations(&source, threshold, iterations)?;
                 analyzer::select_targets(&profile, threshold, ml_mode)
             };
 

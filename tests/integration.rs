@@ -215,10 +215,7 @@ fn integration_count_pairs_generates_while_loop() {
     assert_eq!(result.generated_functions.len(), 1);
     let lib_rs =
         std::fs::read_to_string(tmp.path().join("rustify_ml_ext/src/lib.rs")).expect("read lib.rs");
-    assert!(
-        lib_rs.contains("fn count_pairs"),
-        "missing fn count_pairs"
-    );
+    assert!(lib_rs.contains("fn count_pairs"), "missing fn count_pairs");
     // count_pairs uses a for loop over range(len(tokens)-1)
     assert!(
         lib_rs.contains("for i in 0.."),

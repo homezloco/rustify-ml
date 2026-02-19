@@ -24,7 +24,9 @@ use rustpython_parser::ast::{Stmt, Suite};
 use tracing::{info, warn};
 
 use crate::utils::{GenerationResult, InputSource, TargetSpec, extract_code};
-use render::{render_cargo_toml_with_options, render_function_with_options, render_lib_rs_with_options};
+use render::{
+    render_cargo_toml_with_options, render_function_with_options, render_lib_rs_with_options,
+};
 
 /// Detect numpy usage in Python source (triggers ndarray mode).
 fn detects_numpy(code: &str) -> bool {
@@ -120,7 +122,8 @@ fn generate_with_options(
     let stmts: &[Stmt] = suite.as_slice();
 
     // Merge previously generated functions (if crate already exists) with newly generated ones.
-    let mut functions_by_name: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    let mut functions_by_name: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
 
     let existing_lib = crate_dir.join("src/lib.rs");
     if existing_lib.exists() {
@@ -154,7 +157,10 @@ fn generate_with_options(
         info!(path = %crate_dir.display(), "dry-run: wrote generated files (no build)");
     }
     if fallback_functions > 0 {
-        warn!(fallback_functions, "some functions fell back to echo translation");
+        warn!(
+            fallback_functions,
+            "some functions fell back to echo translation"
+        );
     }
     info!(path = %crate_dir.display(), funcs = functions.len(), "generated Rust stubs");
 
@@ -178,10 +184,10 @@ mod tests {
 
     use crate::utils::{InputSource, TargetSpec};
 
-    use super::*;
     use super::expr::expr_to_rust;
     use super::infer::render_len_checks;
     use super::translate::translate_function_body;
+    use super::*;
 
     // ── expr tests ────────────────────────────────────────────────────────────
 
@@ -264,7 +270,12 @@ def euclidean(p1, p2):
     return total ** 0.5
 "#;
         let suite = Suite::parse(code, "<test>").expect("parse failed");
-        let target = TargetSpec { func: "euclidean".to_string(), line: 1, percent: 100.0, reason: "test".to_string() };
+        let target = TargetSpec {
+            func: "euclidean".to_string(),
+            line: 1,
+            percent: 100.0,
+            reason: "test".to_string(),
+        };
         let t = translate_function_body(&target, suite.as_slice()).expect("no translation");
         assert_eq!(t.return_type, "f64");
         assert!(!t.fallback);
@@ -275,7 +286,12 @@ def euclidean(p1, p2):
     fn test_translate_stmt_float_assign_init() {
         let code = "def f(x):\n    total = 0.0\n    return total\n";
         let suite = Suite::parse(code, "<test>").expect("parse");
-        let target = TargetSpec { func: "f".to_string(), line: 1, percent: 100.0, reason: "test".to_string() };
+        let target = TargetSpec {
+            func: "f".to_string(),
+            line: 1,
+            percent: 100.0,
+            reason: "test".to_string(),
+        };
         let t = translate_function_body(&target, suite.as_slice()).expect("no translation");
         assert!(t.body.contains("let mut total: f64"), "got: {}", t.body);
     }
@@ -284,7 +300,12 @@ def euclidean(p1, p2):
     fn test_translate_stmt_subscript_assign() {
         let code = "def f(result, i, val):\n    result[i] = val\n    return result\n";
         let suite = Suite::parse(code, "<test>").expect("parse");
-        let target = TargetSpec { func: "f".to_string(), line: 1, percent: 100.0, reason: "test".to_string() };
+        let target = TargetSpec {
+            func: "f".to_string(),
+            line: 1,
+            percent: 100.0,
+            reason: "test".to_string(),
+        };
         let t = translate_function_body(&target, suite.as_slice()).expect("no translation");
         assert!(t.body.contains("result[i] = val"), "got: {}", t.body);
     }
@@ -293,9 +314,18 @@ def euclidean(p1, p2):
     fn test_translate_stmt_list_init() {
         let code = "def f(n):\n    result = [0.0] * n\n    return result\n";
         let suite = Suite::parse(code, "<test>").expect("parse");
-        let target = TargetSpec { func: "f".to_string(), line: 1, percent: 100.0, reason: "test".to_string() };
+        let target = TargetSpec {
+            func: "f".to_string(),
+            line: 1,
+            percent: 100.0,
+            reason: "test".to_string(),
+        };
         let t = translate_function_body(&target, suite.as_slice()).expect("no translation");
-        assert!(t.body.contains("vec![") && t.body.contains("result"), "got: {}", t.body);
+        assert!(
+            t.body.contains("vec![") && t.body.contains("result"),
+            "got: {}",
+            t.body
+        );
     }
 
     #[test]
@@ -303,7 +333,12 @@ def euclidean(p1, p2):
         // result = [x * 2.0 for x in data] → let result: Vec<f64> = data.iter().map(|x| ...).collect();
         let code = "def f(data):\n    result = [x * 2.0 for x in data]\n    return result\n";
         let suite = Suite::parse(code, "<test>").expect("parse");
-        let target = TargetSpec { func: "f".to_string(), line: 1, percent: 100.0, reason: "test".to_string() };
+        let target = TargetSpec {
+            func: "f".to_string(),
+            line: 1,
+            percent: 100.0,
+            reason: "test".to_string(),
+        };
         let t = translate_function_body(&target, suite.as_slice()).expect("no translation");
         assert!(
             t.body.contains(".iter().map(") && t.body.contains(".collect()"),
@@ -316,9 +351,18 @@ def euclidean(p1, p2):
     fn test_translate_dot_product_zero_fallback() {
         let code = "def dot_product(a, b):\n    total = 0.0\n    for i in range(len(a)):\n        total += a[i] * b[i]\n    return total\n";
         let suite = Suite::parse(code, "<test>").expect("parse");
-        let target = TargetSpec { func: "dot_product".to_string(), line: 1, percent: 80.0, reason: "test".to_string() };
+        let target = TargetSpec {
+            func: "dot_product".to_string(),
+            line: 1,
+            percent: 80.0,
+            reason: "test".to_string(),
+        };
         let t = translate_function_body(&target, suite.as_slice()).expect("no translation");
-        assert!(!t.fallback, "dot_product should not fallback; body:\n{}", t.body);
+        assert!(
+            !t.fallback,
+            "dot_product should not fallback; body:\n{}",
+            t.body
+        );
         assert!(t.body.contains("total +="), "got: {}", t.body);
     }
 
@@ -336,7 +380,12 @@ def matmul(a, b, n):
     return result
 "#;
         let suite = Suite::parse(code, "<test>").expect("parse");
-        let target = TargetSpec { func: "matmul".to_string(), line: 1, percent: 100.0, reason: "test".to_string() };
+        let target = TargetSpec {
+            func: "matmul".to_string(),
+            line: 1,
+            percent: 100.0,
+            reason: "test".to_string(),
+        };
         let t = translate_function_body(&target, suite.as_slice()).expect("no translation");
         assert!(t.body.contains("for i in 0..n"), "got: {}", t.body);
         assert!(t.body.contains("for j in 0..n"), "got: {}", t.body);
@@ -348,7 +397,12 @@ def matmul(a, b, n):
     fn test_translate_while_loop_bool_flag() {
         let code = "def count_pairs(tokens):\n    counts = 0\n    changed = True\n    while changed:\n        changed = False\n        counts += 1\n    return counts\n";
         let suite = Suite::parse(code, "<test>").expect("parse");
-        let target = TargetSpec { func: "count_pairs".to_string(), line: 1, percent: 100.0, reason: "test".to_string() };
+        let target = TargetSpec {
+            func: "count_pairs".to_string(),
+            line: 1,
+            percent: 100.0,
+            reason: "test".to_string(),
+        };
         let t = translate_function_body(&target, suite.as_slice()).expect("no translation");
         assert!(t.body.contains("while changed"), "got:\n{}", t.body);
     }
@@ -357,7 +411,12 @@ def matmul(a, b, n):
     fn test_translate_while_comparison() {
         let code = "def scan(tokens):\n    i = 0\n    while i < len(tokens):\n        i += 1\n    return i\n";
         let suite = Suite::parse(code, "<test>").expect("parse");
-        let target = TargetSpec { func: "scan".to_string(), line: 1, percent: 100.0, reason: "test".to_string() };
+        let target = TargetSpec {
+            func: "scan".to_string(),
+            line: 1,
+            percent: 100.0,
+            reason: "test".to_string(),
+        };
         let t = translate_function_body(&target, suite.as_slice()).expect("no translation");
         assert!(t.body.contains("while i <"), "got:\n{}", t.body);
         assert!(t.body.contains("tokens.len()"), "got:\n{}", t.body);
@@ -369,7 +428,12 @@ def matmul(a, b, n):
     fn test_ndarray_mode_replaces_vec_params() {
         let code = "import numpy as np\ndef dot_product(a, b):\n    total = 0.0\n    for i in range(len(a)):\n        total += a[i] * b[i]\n    return total\n";
         let source = InputSource::Snippet(code.to_string());
-        let targets = vec![TargetSpec { func: "dot_product".to_string(), line: 1, percent: 100.0, reason: "test".to_string() }];
+        let targets = vec![TargetSpec {
+            func: "dot_product".to_string(),
+            line: 1,
+            percent: 100.0,
+            reason: "test".to_string(),
+        }];
         let tmp = tempdir().expect("tempdir");
         let result = generate_ml(&source, &targets, tmp.path(), false).expect("generate_ml");
         let lib_rs = std::fs::read_to_string(tmp.path().join("rustify_ml_ext/src/lib.rs")).unwrap();
@@ -384,7 +448,12 @@ def matmul(a, b, n):
     fn test_ndarray_mode_no_numpy_import_stays_vec() {
         let code = "def dot_product(a, b):\n    total = 0.0\n    for i in range(len(a)):\n        total += a[i] * b[i]\n    return total\n";
         let source = InputSource::Snippet(code.to_string());
-        let targets = vec![TargetSpec { func: "dot_product".to_string(), line: 1, percent: 100.0, reason: "test".to_string() }];
+        let targets = vec![TargetSpec {
+            func: "dot_product".to_string(),
+            line: 1,
+            percent: 100.0,
+            reason: "test".to_string(),
+        }];
         let tmp = tempdir().expect("tempdir");
         let result = generate_ml(&source, &targets, tmp.path(), false).expect("generate_ml");
         let lib_rs = std::fs::read_to_string(tmp.path().join("rustify_ml_ext/src/lib.rs")).unwrap();
@@ -399,8 +468,16 @@ def matmul(a, b, n):
     fn test_generate_integration_euclidean() {
         let path = PathBuf::from("examples/euclidean.py");
         let code = std::fs::read_to_string(&path).expect("read example");
-        let source = InputSource::File { path: path.clone(), code };
-        let targets = vec![TargetSpec { func: "euclidean".to_string(), line: 1, percent: 100.0, reason: "test".to_string() }];
+        let source = InputSource::File {
+            path: path.clone(),
+            code,
+        };
+        let targets = vec![TargetSpec {
+            func: "euclidean".to_string(),
+            line: 1,
+            percent: 100.0,
+            reason: "test".to_string(),
+        }];
         let tmp = tempdir().expect("tempdir");
         let result = generate(&source, &targets, tmp.path(), false).expect("generate");
         assert_eq!(result.generated_functions.len(), 1);

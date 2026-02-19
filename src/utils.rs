@@ -137,9 +137,7 @@ pub fn print_hotspot_table(hotspots: &[Hotspot]) {
         println!("{:<30} | {:>4} | {:>6.2}%", h.func, h.line, h.percent);
     }
     println!();
-    println!(
-        "Run with --threshold <N> to filter; use --function <name> to target one directly."
-    );
+    println!("Run with --threshold <N> to filter; use --function <name> to target one directly.");
     println!();
 }
 

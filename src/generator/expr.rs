@@ -34,10 +34,15 @@ pub fn expr_to_rust(expr: &Expr) -> String {
                 if func.id.as_str() == "len" && call.args.len() == 1 {
                     return format!("{}.len()", expr_to_rust(&call.args[0]));
                 }
-                if (func.id.as_str() == "max" || func.id.as_str() == "min") && call.args.len() == 2 {
+                if (func.id.as_str() == "max" || func.id.as_str() == "min") && call.args.len() == 2
+                {
                     let a = expr_to_rust(&call.args[0]);
                     let b = expr_to_rust(&call.args[1]);
-                    let method = if func.id.as_str() == "max" { "max" } else { "min" };
+                    let method = if func.id.as_str() == "max" {
+                        "max"
+                    } else {
+                        "min"
+                    };
                     return format!("({a}).{method}({b})");
                 }
             }

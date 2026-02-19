@@ -50,9 +50,7 @@ pub fn infer_type_from_annotation(annotation: Option<&Expr>) -> String {
 /// Otherwise default to Vec<f64> as the safe ML vector type.
 fn infer_type_from_name(name: &str) -> String {
     match name {
-        "window" | "k" | "n" | "m" | "length" | "size" | "count" | "steps" => {
-            "usize".to_string()
-        }
+        "window" | "k" | "n" | "m" | "length" | "size" | "count" | "steps" => "usize".to_string(),
         _ => "Vec<f64>".to_string(),
     }
 }
@@ -101,4 +99,3 @@ pub fn render_len_checks(params: &[(String, String)]) -> Option<String> {
     }
     Some(checks)
 }
-

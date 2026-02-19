@@ -19,14 +19,13 @@ pub fn render_function_with_options(
     use_ndarray: bool,
 ) -> (String, bool) {
     let rust_name = target.func.to_snake_case();
-    let mut translation = translate_function_body(target, module).unwrap_or_else(|| {
-        super::translate::Translation {
+    let mut translation =
+        translate_function_body(target, module).unwrap_or_else(|| super::translate::Translation {
             params: vec![("data".to_string(), "Vec<f64>".to_string())],
             return_type: "Vec<f64>".to_string(),
             body: "// fallback: echo input\n    Ok(data)".to_string(),
             fallback: true,
-        }
-    });
+        });
 
     // ndarray mode: replace Vec<f64> params with PyReadonlyArray1<f64>
     if use_ndarray {
@@ -99,7 +98,11 @@ fn rustify_ml_ext(_py: Python, m: &PyModule) -> PyResult<()> {{\n\
 
 /// Render the `Cargo.toml` content for the generated crate.
 pub fn render_cargo_toml_with_options(use_ndarray: bool) -> String {
-    let numpy_dep = if use_ndarray { "numpy = \"0.21\"\n" } else { "" };
+    let numpy_dep = if use_ndarray {
+        "numpy = \"0.21\"\n"
+    } else {
+        ""
+    };
     format!(
         "[package]\n\
 name = \"rustify_ml_ext\"\n\
