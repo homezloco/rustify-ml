@@ -1,0 +1,18 @@
+[build-system]
+requires = ["maturin>=1.5,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "rustify-stdlib"
+version = "0.1.0"
+description = "Prebuilt Rust routines (PyO3) for Python acceleration"
+authors = ["rustify team"]
+requires-python = ">=3.9"
+classifiers = [
+  "Programming Language :: Rust",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3",
+]
+
+[project.urls]
+Homepage = "https://github.com/homezloco/rustify-ml"

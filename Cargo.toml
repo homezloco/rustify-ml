@@ -3,6 +3,9 @@ name = "rustify-ml"
 version = "0.1.0"
 edition = "2024"
 
+[workspace]
+members = ["rustify-stdlib"]
+
 [[bin]]
 name = "rustify-ml"
 path = "src/main.rs"
@@ -33,6 +36,8 @@ torch-hint = ["tch"]
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
+rustpython-parser = "0.4"
+tempfile = "3"
 
 [[bench]]
 name = "speedup"

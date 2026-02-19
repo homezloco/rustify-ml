@@ -101,6 +101,11 @@ CLI args (Clap)
 - [ ] Write CHANGELOG.md
 - [ ] Tag v0.1.0 release
 
+### Task 8 (MEDIUM): rustify-stdlib packaging
+- [ ] Add `rustify-stdlib/` crate to workspace and maturin config
+- [ ] Add Python usage example (maturin develop) and parity tests at crate level
+- [ ] Publish/push once wired; share import snippet
+
 ---
 
 ## 4. Translation Patterns Reference
