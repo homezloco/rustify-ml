@@ -126,12 +126,12 @@ fn generate_with_options(
         std::collections::HashMap::new();
 
     let existing_lib = crate_dir.join("src/lib.rs");
-    if existing_lib.exists() {
-        if let Ok(existing_src) = std::fs::read_to_string(&existing_lib) {
-            for func_src in parse_existing_functions(&existing_src) {
-                let name = render::extract_fn_name(&func_src);
-                functions_by_name.insert(name, func_src);
-            }
+    if existing_lib.exists()
+        && let Ok(existing_src) = std::fs::read_to_string(&existing_lib)
+    {
+        for func_src in parse_existing_functions(&existing_src) {
+            let name = render::extract_fn_name(&func_src);
+            functions_by_name.insert(name, func_src);
         }
     }
 
@@ -178,7 +178,7 @@ mod tests {
     use std::path::PathBuf;
 
     use rustpython_parser::Parse;
-    use rustpython_parser::ast::{Expr, Operator, Stmt, Suite};
+    use rustpython_parser::ast::{Expr, Operator, Suite};
     use rustpython_parser::text_size::TextRange;
     use tempfile::tempdir;
 
@@ -345,6 +345,23 @@ def euclidean(p1, p2):
             "expected iter().map().collect() for list comp, got: {}",
             t.body
         );
+        assert_eq!(t.return_type, "Vec<f64>");
+        assert!(!t.fallback);
+    }
+
+    #[test]
+    fn test_translate_nested_for_else_triggers_fallback() {
+        // for..else is unsupported; expect fallback
+        let code = "def f(n):\n    total = 0\n    for i in range(n):\n        for j in range(n):\n            total += i + j\n    else:\n        total += 1\n    return total\n";
+        let suite = Suite::parse(code, "<test>").expect("parse");
+        let target = TargetSpec {
+            func: "f".to_string(),
+            line: 1,
+            percent: 100.0,
+            reason: "test nested for".to_string(),
+        };
+        let t = translate_function_body(&target, suite.as_slice()).expect("no translation");
+        assert!(t.fallback, "expected fallback for for..else, got body:\n{}", t.body);
     }
 
     #[test]

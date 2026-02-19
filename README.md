@@ -4,6 +4,7 @@
 
 [![CI](https://github.com/your-org/rustify-ml/actions/workflows/ci.yml/badge.svg)](https://github.com/your-org/rustify-ml/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+<!-- TODO: add crates.io badge after publish -->
 
 ---
 
@@ -140,6 +141,24 @@ rustify-ml accelerate \
 # ML mode (numpy/torch type hints in generated stubs)
 rustify-ml accelerate --file examples/image_preprocess.py --ml-mode --output dist --dry-run
 ```
+
+### Timing Demo (euclidean)
+
+Baseline vs Rust extension on WSL, CPython 3.12, Ryzen 7:
+
+| Function | Input | Python (us) | Rust (us) | Speedup |
+|----------|-------|-------------|-----------|---------|
+| euclidean | n=1_000 | 73.9 | 20.5 | 3.6x |
+
+Reproduce:
+
+```bash
+python -X utf8 benches/compare.py --function euclidean --with-rust
+```
+
+### CLI Output (screenshot)
+
+<!-- TODO: insert GIF/screenshot of accelerate summary table -->
 
 ---
 

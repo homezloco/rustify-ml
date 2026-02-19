@@ -57,6 +57,9 @@ enum Commands {
         /// Profile only: print hotspot table and exit without generating code
         #[arg(long, default_value_t = false)]
         list_targets: bool,
+        /// Profile only (with iterations): print hotspot table and exit
+        #[arg(long, default_value_t = false)]
+        profile_only: bool,
         /// Skip profiler and target a specific function by name
         #[arg(long)]
         function: Option<String>,
@@ -97,6 +100,7 @@ fn main() -> Result<()> {
             dry_run,
             benchmark,
             list_targets,
+            profile_only,
             function,
             iterations,
         } => {
@@ -111,6 +115,7 @@ fn main() -> Result<()> {
                 dry_run,
                 benchmark,
                 list_targets,
+                profile_only,
                 ?function,
                 iterations,
                 "starting accelerate"
@@ -134,6 +139,14 @@ fn main() -> Result<()> {
                 let profile = profiler::profile_input(&source, threshold)?;
                 utils::print_hotspot_table(&profile.hotspots);
                 info!(input_kind, "list-targets completed");
+                return Ok(());
+            }
+
+            // --profile-only: run profiler with iterations, print hotspots, exit
+            if profile_only {
+                let profile = profiler::profile_input_with_iterations(&source, threshold, iterations)?;
+                utils::print_hotspot_table(&profile.hotspots);
+                info!(input_kind, iterations, "profile-only completed");
                 return Ok(());
             }
 

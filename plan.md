@@ -58,16 +58,16 @@ CLI args (Clap)
 - [x] Add `translate_for_iter()` helper (range(n), range(a,b), fallback)
 - [x] Add unit tests: float_assign_init, subscript_assign, list_init, range_two_args, normalize_pixels
 - [x] Achieve 0 fallbacks on `examples/euclidean.py`
-- [ ] Verify 0 fallbacks on `dot_product` in `matrix_ops.py` (run `cargo test`)
+- [x] Verify 0 fallbacks on `dot_product` in `matrix_ops.py` (run `cargo test`)
 - [x] Translate nested for loops: `for i in range(n): for j in range(n):` → nested for (translate_body_inner depth-aware recursion)
 - [x] Add matmul nested-loop unit test (test_translate_matmul_nested_loops)
-- [ ] Verify matmul generates 0 fallbacks end-to-end (run `cargo test`)
+- [x] Verify matmul generates 0 fallbacks end-to-end (run `cargo test`)
 
 ### Task 2 (HIGH): More Unit Tests
-- [ ] Add snapshot test: assert generated lib.rs matches expected golden file
-- [ ] Add unit test: translate_body for nested for loop (expect partial/fallback with clear comment)
-- [ ] Add profiler unit test with mock cProfile stdout output
-- [ ] Add integration test: normalize_pixels achieves 0 fallbacks with new list init + subscript assign
+- [x] Add snapshot test: assert generated lib.rs matches expected golden file
+- [x] Add unit test: translate_body for nested for loop (expect partial/fallback with clear comment)
+- [x] Add profiler unit test with mock cProfile stdout output (parse_hotspots helper)
+- [x] Add integration test: normalize_pixels achieves 0 fallbacks with new list init + subscript assign
 
 ### Task 3 (HIGH): CLI Polish ✅
 - [x] Add `--list-targets` flag: profile only, print hotspots, no generation
@@ -80,7 +80,7 @@ CLI args (Clap)
 - [x] `python3` → `python` fallback (cross-platform)
 - [x] Python version pre-flight check (warn if < 3.10)
 - [x] Filter `<built-in>` and `<frozen>` frames from hotspot list
-- [ ] Add `--profile-only` flag: run profiler, print hotspots, exit
+- [x] Add `--profile-only` flag: run profiler, print hotspots, exit
 
 ### Task 5 (MEDIUM): ndarray Optional Feature ✅
 - [x] Trigger on `uses_numpy=true` (detects_numpy() checks import numpy/from numpy/import np)
@@ -96,14 +96,14 @@ CLI args (Clap)
 - [ ] Add crates.io badge once published
 
 ### Task 7 (LOW): Release Prep
-- [ ] Add `benches/speedup.rs` with Criterion before/after benchmarks
+- [x] Add `benches/speedup.rs` with Criterion before/after benchmarks
 - [ ] `cargo publish --dry-run` check
-- [ ] Write CHANGELOG.md
+- [x] Write CHANGELOG.md
 - [ ] Tag v0.1.0 release
 
 ### Task 8 (MEDIUM): rustify-stdlib packaging
-- [ ] Add `rustify-stdlib/` crate to workspace and maturin config
-- [ ] Add Python usage example (maturin develop) and parity tests at crate level
+- [x] Add `rustify-stdlib/` crate to workspace and maturin config
+- [x] Add Python usage example (maturin develop) and parity tests at crate level
 - [ ] Publish/push once wired; share import snippet
 
 ---

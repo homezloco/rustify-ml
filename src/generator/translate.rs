@@ -149,14 +149,13 @@ pub(super) fn translate_body_inner(body: &[Stmt], depth: usize) -> Option<BodyTr
 
         match translate_stmt_inner(stmt, depth) {
             Some(line) => {
-                if line.trim_start().starts_with("return ") {
+                if line.trim_start().starts_with("return ")
+                    && let Stmt::Return(ret) = stmt
+                    && let Some(expr) = &ret.value
+                {
                     had_return = true;
-                    if let Stmt::Return(ret) = stmt {
-                        if let Some(expr) = &ret.value {
-                            let ret_ty = infer_return_type(expr.as_ref(), &var_types);
-                            inferred_return = Some(ret_ty);
-                        }
-                    }
+                    let ret_ty = infer_return_type(expr.as_ref(), &var_types);
+                    inferred_return = Some(ret_ty);
                 }
                 out.push_str(&indent);
                 out.push_str(&line);
@@ -172,11 +171,11 @@ pub(super) fn translate_body_inner(body: &[Stmt], depth: usize) -> Option<BodyTr
         }
     }
 
-    if !had_return {
-        if let Some(ret_var) = var_types.keys().find(|k| *k == "result" || *k == "output") {
-            inferred_return = Some("Vec<f64>".to_string());
-            out.push_str(&format!("{indent}return Ok({});\n", ret_var));
-        }
+    if !had_return
+        && let Some(ret_var) = var_types.keys().find(|k| *k == "result" || *k == "output")
+    {
+        inferred_return = Some("Vec<f64>".to_string());
+        out.push_str(&format!("{indent}return Ok({});\n", ret_var));
     }
 
     Some(BodyTranslation {

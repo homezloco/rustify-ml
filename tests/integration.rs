@@ -23,6 +23,27 @@ fn load_example(name: &str) -> (PathBuf, InputSource) {
     (path, source)
 }
 
+// ── nested for fallback ───────────────────────────────────────────────────────
+
+#[test]
+fn integration_nested_for_else_fallback() {
+    // for..else is unsupported; expect fallback count > 0
+    let source = InputSource::Snippet(
+        "def f(n):\n    total = 0\n    for i in range(n):\n        for j in range(n):\n            total += i + j\n    else:\n        total += 1\n    return total\n".to_string(),
+    );
+    let targets = vec![TargetSpec {
+        func: "f".to_string(),
+        line: 1,
+        percent: 100.0,
+        reason: "nested for else".to_string(),
+    }];
+    let tmp = tempdir().expect("tempdir");
+    let result = generate(&source, &targets, tmp.path(), false).expect("generate failed");
+
+    assert_eq!(result.generated_functions.len(), 1);
+    assert!(result.fallback_functions > 0, "expected fallback for for..else construct");
+}
+
 // ── euclidean ────────────────────────────────────────────────────────────────
 
 #[test]
@@ -124,6 +145,22 @@ fn integration_dot_product_zero_fallback() {
     );
 }
 
+#[test]
+fn integration_matmul_zero_fallback() {
+    let (_, source) = load_example("matrix_ops.py");
+    let targets = vec![TargetSpec {
+        func: "matmul".to_string(),
+        line: 7,
+        percent: 95.0,
+        reason: "matmul nested loops".to_string(),
+    }];
+    let tmp = tempdir().expect("tempdir");
+    let result = generate(&source, &targets, tmp.path(), false).expect("generate failed");
+
+    assert_eq!(result.generated_functions.len(), 1);
+    assert_eq!(result.fallback_functions, 0, "matmul should fully translate without fallback");
+}
+
 // ── normalize_pixels (image_preprocess) ──────────────────────────────────────
 
 #[test]
@@ -145,6 +182,22 @@ fn integration_normalize_pixels_generates() {
         lib_rs.contains("fn normalize_pixels"),
         "missing fn normalize_pixels"
     );
+}
+
+#[test]
+fn integration_normalize_pixels_zero_fallback() {
+    let (_, source) = load_example("image_preprocess.py");
+    let targets = vec![TargetSpec {
+        func: "normalize_pixels".to_string(),
+        line: 1,
+        percent: 90.0,
+        reason: "integration fallback check".to_string(),
+    }];
+    let tmp = tempdir().expect("tempdir");
+    let result = generate(&source, &targets, tmp.path(), false).expect("generate failed");
+
+    assert_eq!(result.generated_functions.len(), 1);
+    assert_eq!(result.fallback_functions, 0, "normalize_pixels should not fallback");
 }
 
 // ── dry_run writes files ──────────────────────────────────────────────────────

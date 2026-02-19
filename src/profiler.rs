@@ -120,13 +120,21 @@ for (fname, line, func), stat in stats.stats.items():
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
+    let hotspots = parse_hotspots(&stdout, threshold);
+    info!(
+        count = hotspots.len(),
+        threshold, "profiled hotspots collected"
+    );
+
+    Ok(ProfileSummary { hotspots })
+}
+
+fn parse_hotspots(stdout: &str, threshold: f32) -> Vec<Hotspot> {
     let mut hotspots = Vec::new();
     for line in stdout.lines() {
-        // expected line: "pct% func file:line"
         if let Some((percent_part, rest)) = line.split_once(' ')
             && let Ok(percent) = percent_part.trim().trim_end_matches('%').parse::<f32>()
         {
-            // Skip built-in and internal Python frames
             if rest.contains("<built-in") || rest.contains("<frozen") {
                 continue;
             }
@@ -145,10 +153,21 @@ for (fname, line, func), stat in stats.stats.items():
 
     hotspots.retain(|h| h.percent >= threshold);
     hotspots.sort_by(|a, b| b.percent.total_cmp(&a.percent));
-    info!(
-        count = hotspots.len(),
-        threshold, "profiled hotspots collected"
-    );
+    hotspots
+}
 
-    Ok(ProfileSummary { hotspots })
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_hotspots_filters_and_sorts() {
+        let stdout = "42.10% foo /tmp/code.py:10\n	not-a-match\n15.00% <built-in>:0\n20.00% bar /tmp/code.py:20";
+        let hs = parse_hotspots(stdout, 18.0);
+        assert_eq!(hs.len(), 2);
+        assert_eq!(hs[0].func, "foo");
+        assert_eq!(hs[0].line, 10);
+        assert_eq!(hs[1].func, "bar");
+        assert_eq!(hs[1].line, 20);
+    }
 }
