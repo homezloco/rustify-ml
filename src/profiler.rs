@@ -94,7 +94,7 @@ total = sum(v[3] for v in stats.stats.values()) or 1e-9
 for (fname, line, func), stat in stats.stats.items():
     ct = stat[3]
     pct = (ct / total) * 100.0
-    print(f"{pct:.2f}% {func} {fname}:{line}")
+    print(f"{{pct:.2f}}% {{func}} {{fname}}:{{line}}")
 "#,
         path = path.display()
     );

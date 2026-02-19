@@ -31,6 +31,44 @@ fn detects_numpy(code: &str) -> bool {
     code.contains("import numpy") || code.contains("from numpy") || code.contains("import np")
 }
 
+/// Parse existing lib.rs content and return complete #[pyfunction] blocks using brace balance.
+fn parse_existing_functions(lib_rs: &str) -> Vec<String> {
+    let mut funcs = Vec::new();
+    let mut current = Vec::new();
+    let mut in_fn = false;
+    let mut brace_balance: i32 = 0;
+    let mut seen_open = false;
+    for line in lib_rs.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("#[pyfunction]") {
+            current.clear();
+            in_fn = true;
+            brace_balance = 0;
+            seen_open = false;
+            current.push(line.to_string());
+            continue;
+        }
+
+        if in_fn {
+            current.push(line.to_string());
+            let opens = line.matches('{').count() as i32;
+            let closes = line.matches('}').count() as i32;
+            if opens > 0 {
+                seen_open = true;
+            }
+            brace_balance += opens;
+            brace_balance -= closes;
+
+            if seen_open && brace_balance <= 0 {
+                funcs.push(current.join("\n"));
+                current.clear();
+                in_fn = false;
+            }
+        }
+    }
+    funcs
+}
+
 /// Generate Rust + PyO3 stubs for the given targets.
 pub fn generate(
     source: &InputSource,
@@ -81,17 +119,30 @@ fn generate_with_options(
         Suite::parse(&code, "<input>").context("failed to parse Python input for generation")?;
     let stmts: &[Stmt] = suite.as_slice();
 
-    let mut fallback_functions = 0usize;
-    let functions: Vec<String> = targets
-        .iter()
-        .map(|t| {
-            let (code, fallback) = render_function_with_options(t, stmts, use_ndarray);
-            if fallback {
-                fallback_functions += 1;
+    // Merge previously generated functions (if crate already exists) with newly generated ones.
+    let mut functions_by_name: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+
+    let existing_lib = crate_dir.join("src/lib.rs");
+    if existing_lib.exists() {
+        if let Ok(existing_src) = std::fs::read_to_string(&existing_lib) {
+            for func_src in parse_existing_functions(&existing_src) {
+                let name = render::extract_fn_name(&func_src);
+                functions_by_name.insert(name, func_src);
             }
-            code
-        })
-        .collect();
+        }
+    }
+
+    let mut fallback_functions = 0usize;
+    for t in targets.iter() {
+        let (code, fallback) = render_function_with_options(t, stmts, use_ndarray);
+        let name = render::extract_fn_name(&code);
+        if fallback {
+            fallback_functions += 1;
+        }
+        functions_by_name.insert(name, code);
+    }
+
+    let functions: Vec<String> = functions_by_name.into_values().collect();
 
     let lib_rs = render_lib_rs_with_options(&functions, use_ndarray);
     let cargo_toml = render_cargo_toml_with_options(use_ndarray);

@@ -7,7 +7,11 @@ pub fn infer_params(args: &rustpython_parser::ast::Arguments) -> Vec<(String, St
     args.args
         .iter()
         .map(|a| {
-            let ty = infer_type_from_annotation(a.def.annotation.as_deref());
+            let ty = if a.def.annotation.is_none() {
+                infer_type_from_name(a.def.arg.as_str())
+            } else {
+                infer_type_from_annotation(a.def.annotation.as_deref())
+            };
             (a.def.arg.to_string(), ty)
         })
         .collect()
@@ -35,6 +39,19 @@ pub fn infer_type_from_annotation(annotation: Option<&Expr>) -> String {
                 }
             }
             "Vec<f64>".to_string()
+        }
+        _ => "Vec<f64>".to_string(),
+    }
+}
+
+/// Heuristic type inference when no annotation is provided.
+///
+/// Common scalar loop/size parameters (e.g., window, k, n, m, length, size) → usize.
+/// Otherwise default to Vec<f64> as the safe ML vector type.
+fn infer_type_from_name(name: &str) -> String {
+    match name {
+        "window" | "k" | "n" | "m" | "length" | "size" | "count" | "steps" => {
+            "usize".to_string()
         }
         _ => "Vec<f64>".to_string(),
     }

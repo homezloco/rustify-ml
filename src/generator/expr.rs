@@ -3,13 +3,29 @@
 //! Converts Python AST expression nodes into Rust source strings.
 //! All functions are pure (no I/O, no state).
 
-use rustpython_parser::ast::{CmpOp, Expr, Operator};
+use rustpython_parser::ast::{BoolOp, CmpOp, Expr, Operator, UnaryOp};
 
 /// Translate a Python expression to a Rust expression string.
 pub fn expr_to_rust(expr: &Expr) -> String {
     match expr {
         Expr::Name(n) => n.id.to_string(),
         Expr::Constant(c) => constant_to_rust(&c.value),
+        Expr::UnaryOp(unary) => {
+            let operand = expr_to_rust(&unary.operand);
+            match unary.op {
+                UnaryOp::USub => format!("-({operand})"),
+                UnaryOp::Not => format!("!{operand}"),
+                _ => format!("-{operand}"),
+            }
+        }
+        Expr::BoolOp(boolop) if !boolop.values.is_empty() => {
+            let op = match boolop.op {
+                BoolOp::And => "&&",
+                BoolOp::Or => "||",
+            };
+            let rendered: Vec<String> = boolop.values.iter().map(expr_to_rust).collect();
+            rendered.join(&format!(" {op} "))
+        }
         Expr::Call(call) => {
             if let Expr::Name(func) = call.func.as_ref() {
                 if func.id.as_str() == "range" && call.args.len() == 1 {
@@ -18,8 +34,14 @@ pub fn expr_to_rust(expr: &Expr) -> String {
                 if func.id.as_str() == "len" && call.args.len() == 1 {
                     return format!("{}.len()", expr_to_rust(&call.args[0]));
                 }
+                if (func.id.as_str() == "max" || func.id.as_str() == "min") && call.args.len() == 2 {
+                    let a = expr_to_rust(&call.args[0]);
+                    let b = expr_to_rust(&call.args[1]);
+                    let method = if func.id.as_str() == "max" { "max" } else { "min" };
+                    return format!("({a}).{method}({b})");
+                }
             }
-            "/* call fallback */".to_string()
+            format!("/* call {} fallback */", expr_to_rust(call.func.as_ref()))
         }
         Expr::BinOp(binop) => {
             let left = expr_to_rust(&binop.left);
@@ -36,6 +58,20 @@ pub fn expr_to_rust(expr: &Expr) -> String {
             };
             format!("({} {} {})", left, op, right)
         }
+        Expr::Compare(comp) if comp.ops.len() == 1 && comp.comparators.len() == 1 => {
+            let left = expr_to_rust(&comp.left);
+            let right = expr_to_rust(&comp.comparators[0]);
+            let op = match comp.ops[0] {
+                CmpOp::Lt => "<",
+                CmpOp::LtE => "<=",
+                CmpOp::Gt => ">",
+                CmpOp::GtE => ">=",
+                CmpOp::Eq => "==",
+                CmpOp::NotEq => "!=",
+                _ => "<",
+            };
+            format!("{left} {op} {right}")
+        }
         Expr::Subscript(sub) => {
             let value = expr_to_rust(&sub.value);
             let index = expr_to_rust(&sub.slice);
@@ -44,7 +80,15 @@ pub fn expr_to_rust(expr: &Expr) -> String {
         Expr::Attribute(attr) => {
             format!("{}.{}", expr_to_rust(&attr.value), attr.attr)
         }
-        _ => "0".to_string(),
+        Expr::List(list) => {
+            let elems: Vec<String> = list.elts.iter().map(expr_to_rust).collect();
+            format!("vec![{}]", elems.join(", "))
+        }
+        Expr::Tuple(tuple) => {
+            let elems: Vec<String> = tuple.elts.iter().map(expr_to_rust).collect();
+            format!("({})", elems.join(", "))
+        }
+        _ => "/* unsupported expr */".to_string(),
     }
 }
 
