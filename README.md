@@ -16,6 +16,8 @@
 3. **Generates** safe Rust + PyO3 stubs with length-check guards and type inference
 4. **Builds** an installable Python extension via `maturin develop --release`
 
+**Bridge:** Python (cProfile) → hotspot selection → Rust codegen (PyO3) → maturin wheel → editable install → parity tests + benchmarks. No manual glue required.
+
 Typical speedups: **5–100x** on pure-Python loops (tokenizers, matrix ops, image preprocessing, data pipelines).
 
 ---
@@ -37,6 +39,10 @@ rustify-ml accelerate --file examples/euclidean.py --output dist --threshold 10
 cd dist/rustify_ml_ext && maturin develop --release
 python -c "from rustify_ml_ext import euclidean; print(euclidean([0.0,3.0,4.0],[0.0,0.0,0.0]))"
 # → 5.0
+
+# Validate parity + speedups
+python -X utf8 tests/test_all_fixtures.py --with-rust
+python benches/compare.py --with-rust
 ```
 
 ---
@@ -97,18 +103,26 @@ cargo run -- accelerate \
   --benchmark
 ```
 
-**Python baseline** (run `python benches/compare.py`):
+**Latest benchmark snapshot** (WSL, CPython 3.12, `python benches/compare.py --with-rust`):
 ```
-  rustify-ml speedup comparison
-  Benchmark                      |    Python |  Iters
-  ------------------------------+-----------+-------
-  euclidean distance             |     0.312s |  10000
-  dot product (n=1000)           |     1.847s |   5000
-  normalize pixels (n=1000)      |     0.923s |   5000
-  count_pairs BPE (n=500)        |     0.614s |   5000
+  Function                            |  Python us |    Rust us |  Speedup
+  ------------------------------------+------------+------------+---------
+  euclidean (n=1000)                  |       73.9 |       20.5 |     3.6x
+  dot_product (n=1000)                |       52.0 |       20.3 |     2.6x
+  normalize_pixels (n=1000)           |       59.1 |       26.4 |     2.2x
+  running_mean (n=500, w=10)          |      376.3 |       19.2 |    19.6x
+  count_pairs (n=500)                 |       83.4 |       60.0 |     1.4x
+  bpe_encode (len=100)                |       12.1 |        1.1 |    11.2x
+  standard_scale (n=1000)             |       56.4 |       25.9 |     2.2x
+  min_max_scale (n=1000)              |       57.0 |       26.2 |     2.2x
+  l2_normalize (n=1000)               |       89.6 |       26.1 |     3.4x
+  convolve1d (n=1000, k=5)            |      326.2 |       29.5 |    11.1x
+  moving_average (n=1000, w=10)       |      525.3 |       33.0 |    15.9x
+  diff (n=1000)                       |       66.3 |       26.2 |     2.5x
+  cumsum (n=1000)                     |       48.4 |       28.8 |     1.7x
 ```
 
-After `maturin develop --release`, run `python benches/compare.py --with-rust` to see speedups.
+After `maturin develop --release`, re-run `python benches/compare.py --with-rust` to refresh numbers for your machine.
 
 ## Examples
 
