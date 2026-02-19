@@ -1,1 +1,4 @@
 /target
+.venv/
+dist/rustify_ml_ext/Cargo.lock
+examples/**/__pycache__/
