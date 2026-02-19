@@ -1,4 +1,4 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 
 fn euclidean(a: &[f64], b: &[f64]) -> f64 {
     let mut sum = 0.0f64;

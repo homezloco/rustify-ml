@@ -1,4 +1,4 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use rustify_stdlib::{bpe_encode, convolve1d, dot_product, euclidean, moving_average};
 
 fn make_vec(len: usize, start: f64) -> Vec<f64> {
