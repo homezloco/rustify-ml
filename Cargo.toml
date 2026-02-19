@@ -11,6 +11,7 @@ readme = "README.md"
 
 [workspace]
 members = ["rustify-stdlib"]
+exclude = ["dist/rustify_ml_ext"]
 
 [[bin]]
 name = "rustify-ml"

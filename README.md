@@ -158,7 +158,7 @@ python -X utf8 benches/compare.py --function euclidean --with-rust
 
 ### CLI Output (screenshot)
 
-<!-- TODO: insert GIF/screenshot of accelerate summary table -->
+![CLI demo](cli.gif)
 
 ---
 
