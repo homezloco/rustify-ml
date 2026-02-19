@@ -144,11 +144,7 @@ fn main() -> Result<()> {
 
             // --profile-only: run profiler with iterations, print hotspots, exit
             if profile_only {
-                let profile = profiler::profile_input_with_iterations(
-                    &source,
-                    threshold,
-                    iterations,
-                )?;
+                let profile = profiler::profile_input_with_iterations(&source, threshold, iterations)?;
                 utils::print_hotspot_table(&profile.hotspots);
                 info!(input_kind, iterations, "profile-only completed");
                 return Ok(());

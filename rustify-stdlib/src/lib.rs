@@ -1,3 +1,5 @@
+#![allow(unsafe_op_in_unsafe_fn)]
+use pyo3::prelude::Bound;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
@@ -76,7 +78,7 @@ pub fn bpe_encode(text: String, _merges: Vec<(String, String)>) -> PyResult<Vec<
 }
 
 #[pymodule]
-fn rustify_stdlib(_py: Python, m: &PyModule) -> PyResult<()> {
+fn rustify_stdlib(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(euclidean, m)?)?;
     m.add_function(wrap_pyfunction!(dot_product, m)?)?;
     m.add_function(wrap_pyfunction!(moving_average, m)?)?;
