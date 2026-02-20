@@ -53,6 +53,13 @@ pub fn build_extension(r#gen: &GenerationResult, dry_run: bool) -> Result<()> {
         );
     }
 
+    // Ensure maturin is available with a user-friendly hint.
+    if let Err(e) = Command::new("maturin").arg("--version").output() {
+        return Err(anyhow!(
+            "maturin not found: install with `pip install maturin` and ensure it is on PATH (error: {e})"
+        ));
+    }
+
     let status = Command::new("maturin")
         .args(["develop", "--release"])
         .current_dir(&r#gen.crate_dir)

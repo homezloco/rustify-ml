@@ -28,6 +28,7 @@ Typical speedups: **5–100x** on pure-Python loops (tokenizers, matrix ops, ima
 ```bash
 # Install dependencies
 pip install maturin
+cargo install rustify-ml         # once published on crates.io
 cargo install --path rustify-ml   # or: cargo build --release
 
 # Accelerate a Python file (dry-run: generate code, skip build)

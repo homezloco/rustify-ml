@@ -4,7 +4,7 @@
 
 ---
 
-## 1. Current State Snapshot (Updated 2026-02-19)
+## 1. Current State Snapshot (Updated 2026-02-20)
 
 | File | Status | Notes |
 |------|--------|-------|
@@ -13,7 +13,7 @@
 | src/input.rs | ✅ Done | File + stdin + git2 clone |
 | src/utils.rs | ✅ Done | InputSource, Hotspot, ProfileSummary, TargetSpec, GenerationResult, AccelerateRow, print_summary |
 | src/profiler.rs | ✅ Done | cProfile harness; detect_python (python3→python); version pre-flight; stdlib filter |
-| src/analyzer.rs | ✅ Done | Hotspot threshold filter; ml_mode reason tagging |
+| src/analyzer.rs | ✅ Done | Hotspot threshold filter; ml_mode reason tagging; threshold<=0 includes all defined functions (parser-based) |
 | src/generator.rs | ✅ Done | AST walk; assign init; subscript assign; list init; range(a,b); nested for loops (translate_body_inner depth-aware); infer_assign_type; translate_for_iter; fallback tracking |
 | src/builder.rs | ✅ Done | cargo_check_generated (fast-fail); maturin develop; run_benchmark (Python timing harness; speedup table) |
 | Cargo.toml | ✅ Done | lib + bin targets; all deps; optional ndarray/tch features |
@@ -28,7 +28,7 @@
 | README.md | ✅ Done | Full docs: usage, CLI ref, translation table, architecture, roadmap |
 | plan.md | ✅ Done | This file |
 
-**Build status:** `cargo fmt && cargo check` passes (verified in WSL 2026-02-19). `cargo test` passes after PyO3/libpython3.12 linking fix (build.rs + env vars).
+**Build status:** `cargo fmt && cargo check` passes (WSL, 2026-02-20). `cargo test --all --all-targets -- --nocapture` passes after PyO3/libpython3.12 link fix, list comprehension translation, and numpy hint expansion.
 
 ---
 
@@ -107,7 +107,10 @@ CLI args (Clap)
 - [x] Publish/push once wired; share import snippet
 
 ### Remaining Priority List (short)
-All major tasks complete. Follow-ups: optional tag/publish updates; keep README/GIF in sync; retain PyO3 link env notes for future Python upgrades.
+All major tasks complete. Follow-ups:
+- Keep README/plan in sync with threshold<=0 "include all defs" and list-comp/numpy updates.
+- Retain PyO3 link env notes for future Python upgrades.
+- Optional: tag/publish updates and refresh CLI GIF if UI output changes.
 
 ---
 
@@ -124,8 +127,8 @@ All major tasks complete. Follow-ups: optional tag/publish updates; keep README/
 | `result = [0.0] * n` | `let mut result = vec![0.0f64; n];` | ✅ Done |
 | `range(a, b)` | `a..b` | ✅ Done |
 | `for i in range(n): for j...` | nested for loops | ✅ Done |
-| `[f(x) for x in xs]` | `xs.iter().map(f).collect()` | 📋 Planned |
-| `np.array` params | `Array1<f64>` | 📋 Planned (numpy-hint feature) |
+| `[f(x) for x in xs]` | `xs.iter().map(f).collect()` | ✅ Done |
+| `np.array` params | `Array1<f64>` | ✅ Done |
 
 **Untranslatable** (warn + skip): `eval()`, `exec()`, `getattr()`, `async def`, class self mutation
 

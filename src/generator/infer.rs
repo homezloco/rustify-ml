@@ -22,7 +22,7 @@ pub fn infer_params(args: &rustpython_parser::ast::Arguments) -> Vec<(String, St
 /// Supported annotations:
 /// - `int` → `usize`
 /// - `float` → `f64`
-/// - `np.ndarray`, `numpy.ndarray` → `Vec<f64>`
+/// - `np.ndarray`, `numpy.ndarray` → `numpy::PyReadonlyArray1<f64>`
 /// - `torch.Tensor` → `Vec<f64>`
 /// - anything else → `Vec<f64>` (safe default)
 pub fn infer_type_from_annotation(annotation: Option<&Expr>) -> String {
@@ -32,7 +32,7 @@ pub fn infer_type_from_annotation(annotation: Option<&Expr>) -> String {
         Some(Expr::Attribute(attr)) => {
             if let Expr::Name(base) = attr.value.as_ref() {
                 if base.id.as_str() == "np" || base.id.as_str() == "numpy" {
-                    return "Vec<f64>".to_string();
+                    return "numpy::PyReadonlyArray1<f64>".to_string();
                 }
                 if base.id.as_str() == "torch" && attr.attr.as_str() == "Tensor" {
                     return "Vec<f64>".to_string();

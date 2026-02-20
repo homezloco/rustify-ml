@@ -23,6 +23,28 @@ fn load_example(name: &str) -> (PathBuf, InputSource) {
     (path, source)
 }
 
+// ── slow_tokenizer ──────────────────────────────────────────────────────────
+
+#[test]
+fn integration_slow_tokenizer_zero_fallback() {
+    let (_, source) = load_example("slow_tokenizer.py");
+    let targets = vec![TargetSpec {
+        func: "tokenize".to_string(),
+        line: 7,
+        percent: 100.0,
+        reason: "integration test".to_string(),
+    }];
+    let tmp = tempdir().expect("tempdir");
+    let result = generate(&source, &targets, tmp.path(), false).expect("generate failed");
+
+    assert_eq!(result.generated_functions.len(), 1, "expected 1 function");
+    assert_eq!(result.fallback_functions, 0, "tokenize should not fallback");
+    assert!(
+        tmp.path().join("rustify_ml_ext/src/lib.rs").exists(),
+        "lib.rs not written for slow_tokenizer"
+    );
+}
+
 // ── nested for fallback ───────────────────────────────────────────────────────
 
 #[test]

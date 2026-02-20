@@ -30,7 +30,12 @@ use render::{
 
 /// Detect numpy usage in Python source (triggers ndarray mode).
 fn detects_numpy(code: &str) -> bool {
-    code.contains("import numpy") || code.contains("from numpy") || code.contains("import np")
+    code.contains("import numpy")
+        || code.contains("from numpy")
+        || code.contains("import np")
+        || code.contains("np.ndarray")
+        || code.contains("numpy.ndarray")
+        || code.contains("np.array")
 }
 
 /// Parse existing lib.rs content and return complete #[pyfunction] blocks using brace balance.
