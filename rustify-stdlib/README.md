@@ -23,6 +23,11 @@ print(rs.dot_product([1.0,2.0],[3.0,4.0]))
 PY
 ```
 
+## Publish / merge
+- Bump version in `Cargo.toml` (keep in sync with rustify-ml workspace).
+- Tag the release (e.g., `v0.1.1`) and run `cargo publish -p rustify-stdlib`.
+- If merging into the main crate, update rustify-ml README to point to the merged functions and remove this package from the workspace `members`.
+
 ## Functions
 - euclidean(p1, p2) -> float
 - dot_product(a, b) -> float

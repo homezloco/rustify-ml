@@ -66,6 +66,9 @@ enum Commands {
         /// Number of profiler loop iterations (default: 100)
         #[arg(long, default_value_t = 100u32)]
         iterations: u32,
+        /// Skip code regeneration; only rebuild the existing generated extension
+        #[arg(long, default_value_t = false)]
+        no_regen: bool,
     },
 }
 
@@ -103,6 +106,7 @@ fn main() -> Result<()> {
             profile_only,
             function,
             iterations,
+            no_regen,
         } => {
             info!(
                 ?file,
@@ -118,6 +122,7 @@ fn main() -> Result<()> {
                 profile_only,
                 ?function,
                 iterations,
+                no_regen,
                 "starting accelerate"
             );
             let source = input::load_input(
@@ -165,7 +170,19 @@ fn main() -> Result<()> {
                 analyzer::select_targets(&profile, &source, threshold, ml_mode)
             };
 
-            let generation = if ml_mode {
+            // --no-regen: skip generation, only rebuild the existing extension
+            let generation = if no_regen {
+                let crate_dir = output.join("rustify_ml_ext");
+                if !crate_dir.exists() {
+                    anyhow::bail!("--no-regen: generated crate not found at {}", crate_dir.display());
+                }
+                info!(path = %crate_dir.display(), "--no-regen: skipping generation, using existing crate");
+                utils::GenerationResult {
+                    crate_dir,
+                    generated_functions: vec![],
+                    fallback_functions: 0,
+                }
+            } else if ml_mode {
                 generator::generate_ml(&source, &targets, &output, dry_run)?
             } else {
                 generator::generate(&source, &targets, &output, dry_run)?

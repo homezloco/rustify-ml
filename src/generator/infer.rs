@@ -50,6 +50,8 @@ pub fn infer_type_from_annotation(annotation: Option<&Expr>) -> String {
 /// Otherwise default to Vec<f64> as the safe ML vector type.
 fn infer_type_from_name(name: &str) -> String {
     match name {
+        "text" | "string" | "s" | "line" => "String".to_string(),
+        "merges" => "Vec<i64>".to_string(),
         "window" | "k" | "n" | "m" | "length" | "size" | "count" | "steps" => "usize".to_string(),
         _ => "Vec<f64>".to_string(),
     }
@@ -72,9 +74,10 @@ pub fn infer_assign_type(value: &Expr) -> &'static str {
 /// Emit Rust length-check guards for Vec parameters.
 ///
 /// If two or more `Vec<...>` params are present, emits:
-/// ```rust
+/// ```rust,ignore
+/// // assumes `pyo3::exceptions::PyValueError` is in scope and `a`, `b` are params
 /// if a.len() != b.len() {
-///     return Err(PyValueError::new_err("length mismatch"));
+///     return Err(pyo3::exceptions::PyValueError::new_err("length mismatch"));
 /// }
 /// ```
 pub fn render_len_checks(params: &[(String, String)]) -> Option<String> {

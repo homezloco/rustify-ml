@@ -264,7 +264,9 @@ def run_benchmarks(with_rust: bool, markdown: bool) -> int:
         if not with_rust:
             print("\nTip: Run with --with-rust after `maturin develop --release` to see speedups.")
             print("     Run with --markdown to generate a docs-ready table.\n")
+            sys.stdout.flush()
 
+    sys.stdout.flush()
     return 0
 
 

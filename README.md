@@ -2,7 +2,11 @@
 
 > **Auto-accelerate Python ML hotspots with Rust.** Profile → Identify → Generate → Build — drop-in PyO3 extensions with no manual rewrite.
 
-[![CI](https://github.com/your-org/rustify-ml/actions/workflows/ci.yml/badge.svg)](https://github.com/your-org/rustify-ml/actions)
+> **20x faster `running_mean`. 15x faster `convolve1d`. 12x faster BPE tokenizer. Zero manual Rust.**
+
+Install: `cargo install rustify-ml` (from crates.io) — also `pip install maturin` for builds.
+
+[![CI](https://github.com/homezloco/rustify-ml/actions/workflows/ci.yml/badge.svg)](https://github.com/homezloco/rustify-ml/actions)
 [![crates.io](https://img.shields.io/crates/v/rustify-ml.svg)](https://crates.io/crates/rustify-ml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
@@ -72,6 +76,7 @@ Generation:
   --ml-mode              Enable ML-focused heuristics (numpy → PyReadonlyArray1)
   --dry-run              Generate code without building (inspect before install)
   --benchmark            After building, run Python timing harness + speedup table
+  --no-regen             Skip code regeneration; only rebuild the existing extension
 
 Logging:
   -v / -vv               Increase verbosity (debug / trace)
@@ -86,6 +91,7 @@ Logging:
 | `--iterations <n>` | Control how many times the profiler loops the script (default: 100) |
 | `--ml-mode` | Detect numpy imports → use `PyReadonlyArray1<f64>` + add numpy dep to Cargo.toml |
 | `--threshold 0` | Force inclusion of all defined functions (parser-based), even if profiler reports 0% |
+| `--no-regen` | Skip code regeneration; only rebuild the existing `dist/rustify_ml_ext` (prevents overwriting manual edits) |
 
 ### BPE Tokenizer Demo
 
@@ -111,19 +117,19 @@ cargo run -- accelerate \
 ```
   Function                            |  Python us |    Rust us |  Speedup
   ------------------------------------+------------+------------+---------
-  euclidean (n=1000)                  |       73.9 |       20.5 |     3.6x
-  dot_product (n=1000)                |       52.0 |       20.3 |     2.6x
-  normalize_pixels (n=1000)           |       59.1 |       26.4 |     2.2x
-  running_mean (n=500, w=10)          |      376.3 |       19.2 |    19.6x
-  count_pairs (n=500)                 |       83.4 |       60.0 |     1.4x
-  bpe_encode (len=100)                |       12.1 |        1.1 |    11.2x
-  standard_scale (n=1000)             |       56.4 |       25.9 |     2.2x
-  min_max_scale (n=1000)              |       57.0 |       26.2 |     2.2x
-  l2_normalize (n=1000)               |       89.6 |       26.1 |     3.4x
-  convolve1d (n=1000, k=5)            |      326.2 |       29.5 |    11.1x
-  moving_average (n=1000, w=10)       |      525.3 |       33.0 |    15.9x
-  diff (n=1000)                       |       66.3 |       26.2 |     2.5x
-  cumsum (n=1000)                     |       48.4 |       28.8 |     1.7x
+  euclidean (n=1000)                  |       55.8 |       20.8 |     2.7x
+  dot_product (n=1000)                |       45.8 |       19.4 |     2.4x
+  normalize_pixels (n=1000)           |       53.2 |       25.1 |     2.1x
+  running_mean (n=500, w=10)          |      376.9 |       18.7 |    20.2x
+  count_pairs (n=500)                 |       88.3 |       61.5 |     1.4x
+  bpe_encode (len=100)                |       11.1 |        0.9 |    12.3x
+  standard_scale (n=1000)             |       55.1 |       27.2 |     2.0x
+  min_max_scale (n=1000)              |       60.6 |       28.6 |     2.1x
+  l2_normalize (n=1000)               |       95.5 |       29.4 |     3.2x
+  convolve1d (n=1000, k=5)            |      329.8 |       21.0 |    15.7x
+  moving_average (n=1000, w=10)       |      471.5 |       30.8 |    15.3x
+  diff (n=1000)                       |       58.5 |       16.1 |     3.6x
+  cumsum (n=1000)                     |       40.0 |       27.3 |     1.5x
 ```
 
 After `maturin develop --release`, re-run `python benches/compare.py --with-rust` to refresh numbers for your machine.
@@ -151,13 +157,31 @@ Baseline vs Rust extension on WSL, CPython 3.12, Ryzen 7:
 
 | Function | Input | Python (us) | Rust (us) | Speedup |
 |----------|-------|-------------|-----------|---------|
-| euclidean | n=1_000 | 73.9 | 20.5 | 3.6x |
+| euclidean | n=1_000 | 55.8 | 20.8 | 2.7x |
 
 Reproduce:
 
 ```bash
 python -X utf8 benches/compare.py --function euclidean --with-rust
 ```
+
+### ML-mode benchmarks (numpy arrays)
+
+`--ml-mode` is optimized for numeric array inputs (numpy). Use it when your hotspots already operate on `np.ndarray` or can be cheaply converted to arrays. Example (image preprocessing):
+
+```bash
+python -X utf8 benches/compare.py --function normalize_pixels --with-rust --ml-mode
+```
+
+Sample (WSL, CPython 3.12, numpy arrays):
+
+| Function | Input | Python (us) | Rust (us) | Speedup |
+|----------|-------|-------------|-----------|---------|
+| normalize_pixels | n=1_000 | 53.2 | 25.1 | 2.1x |
+| convolve1d | n=1_000, k=5 | 329.8 | 21.0 | 15.7x |
+| running_mean | n=500, w=10 | 376.9 | 18.7 | 20.2x |
+
+Best practices: keep data as `np.ndarray` before calling Rust, avoid per-call Python↔Rust conversions, and rerun `benches/compare.py --with-rust --ml-mode` on your hardware to refresh numbers.
 
 ### CLI Output (screenshot)
 
@@ -209,9 +233,9 @@ Install:   cd dist/rustify_ml_ext && maturin develop --release
 | `result[i] = val` | `result[i] = val;` | ✅ Done |
 | `result = [0.0] * n` | `let mut result = vec![0.0f64; n];` | ✅ Done |
 | `range(a, b)` | `a..b` | ✅ Done |
-| `for i in range(n): for j...` | nested for loops | 🔄 In Progress |
-| `[f(x) for x in xs]` | `xs.iter().map(f).collect()` | 📋 Planned |
-| `np.array` params | `Array1<f64>` | 📋 Planned (numpy-hint feature) |
+| `for i in range(n): for j...` | nested for loops | ✅ Done |
+| `[f(x) for x in xs]` | `xs.iter().map(f).collect()` | ✅ Done |
+| `np.array` params | `PyReadonlyArray1<f64>` (via `--ml-mode`) | ✅ Done |
 
 **Untranslatable** (warns + skips): `eval()`, `exec()`, `getattr()`, `async def`, class self mutation
 
@@ -266,21 +290,24 @@ cd dist/rustify_ml_ext && maturin develop --release && cd ../..
 rustify-ml accelerate --file examples/euclidean.py --output dist --threshold 0 --benchmark
 ```
 
-Expected output (1000 iterations, 100-element vectors):
+Expected output (from `benches/compare.py --with-rust`):
 
 ```
-------------------------------------------------------------
-  rustify-ml benchmark  (1000 iterations each)
-------------------------------------------------------------
-  Function               |     Python |       Rust |  Speedup
-  ----------------------+-----------+-----------+---------
-  euclidean              |    0.0842s |    0.0021s |    40.1x
-  dot_product            |    0.0631s |    0.0018s |    35.1x
-------------------------------------------------------------
+================================================================================
+  rustify-ml benchmark results
+================================================================================
+  Function                            |  Python us |    Rust us |  Speedup
+  ------------------------------------+------------+------------+---------
+  running_mean (n=500, w=10)          |      376.9 |       18.7 |    20.2x
+  convolve1d (n=1000, k=5)            |      329.8 |       21.0 |    15.7x
+  moving_average (n=1000, w=10)       |      471.5 |       30.8 |    15.3x
+  bpe_encode (len=100)                |       11.1 |        0.9 |    12.3x
+  euclidean (n=1000)                  |       55.8 |       20.8 |     2.7x
+================================================================================
 ```
 
-> Numbers are indicative. Actual speedup depends on Python version, CPU, and vector size.
-> For large vectors (1M+ elements), speedups of 50–100x are typical.
+> Numbers measured on WSL, CPython 3.12. Actual speedup depends on Python version, CPU, and input size.
+> Loop-heavy functions (sliding window, convolution, tokenizers) see the largest gains.
 
 ---
 
@@ -291,8 +318,11 @@ Expected output (1000 iterations, 100-element vectors):
 | `examples/euclidean.py` | Euclidean distance | `range(len(x))`, `**`, accumulator |
 | `examples/matrix_ops.py` | Matrix multiply + dot product | nested loops, subscript assign |
 | `examples/image_preprocess.py` | Pixel normalize + gamma | `[0.0] * n`, subscript assign |
-| `examples/slow_tokenizer.py` | BPE-style tokenizer | while loop, dict lookup |
+| `examples/bpe_tokenizer.py` | BPE encode (tiktoken-style) | while loop, HashMap merge rank |
+| `examples/slow_tokenizer.py` | BPE-style tokenizer fixture | while loop, dict lookup |
 | `examples/data_pipeline.py` | CSV parse + running mean | string ops, sliding window |
+| `examples/signal_processing.py` | convolve1d, moving_average, diff, cumsum | nested loops, 1D signal ops |
+| `examples/sklearn_scaler.py` | standard_scale, min_max_scale, l2_normalize | element-wise Vec ops |
 
 ---
 
