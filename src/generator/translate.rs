@@ -145,6 +145,12 @@ pub(super) fn translate_body_inner(body: &[Stmt], depth: usize) -> Option<BodyTr
             {
                 var_types.insert(name_target.id.to_string(), "vec");
             }
+            if let Expr::Subscript(sub) = assign.value.as_ref()
+                && matches!(sub.slice.as_ref(), Expr::Slice(_))
+                && let Expr::Name(name_target) = target
+            {
+                var_types.insert(name_target.id.to_string(), "vec");
+            }
         }
 
         match translate_stmt_inner(stmt, depth) {
@@ -196,6 +202,15 @@ pub(super) fn translate_stmt_inner(stmt: &Stmt, depth: usize) -> Option<String> 
                     let lhs = format!("{}[{}]", expr_to_rust(&sub.value), expr_to_rust(&sub.slice));
                     let rhs = expr_to_rust(value);
                     return Some(format!("{} = {};", lhs, rhs));
+                }
+                // Track slice assigns as vec for return inference
+                if let Expr::Subscript(sub) = value.as_ref()
+                    && matches!(sub.slice.as_ref(), Expr::Slice(_))
+                    && let Expr::Name(name_target) = target
+                {
+                    // mark as vec downstream via a variable declaration
+                    let rhs = expr_to_rust(value);
+                    return Some(format!("let mut {} = {};", name_target.id, rhs));
                 }
                 // List init: result = [0.0] * n → let mut result = vec![0.0f64; n];
                 if let Expr::BinOp(binop) = value.as_ref()
@@ -362,7 +377,14 @@ fn infer_return_type(expr: &Expr, var_types: &HashMap<String, &str>) -> String {
             "f64".to_string()
         }
         Expr::List(_) | Expr::ListComp(_) => "Vec<f64>".to_string(),
-        Expr::Tuple(_) => "Vec<f64>".to_string(),
+        Expr::Tuple(tuple) => {
+            // Heuristic: two-element tuple used for argmax/argmin → (usize, f64)
+            if tuple.elts.len() == 2 {
+                "(usize, f64)".to_string()
+            } else {
+                "Vec<f64>".to_string()
+            }
+        }
         _ => "f64".to_string(),
     }
 }

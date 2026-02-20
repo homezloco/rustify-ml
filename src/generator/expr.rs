@@ -79,8 +79,29 @@ pub fn expr_to_rust(expr: &Expr) -> String {
         }
         Expr::Subscript(sub) => {
             let value = expr_to_rust(&sub.value);
-            let index = expr_to_rust(&sub.slice);
-            format!("{}[{}]", value, index)
+            match sub.slice.as_ref() {
+                // Support simple slices without step: x[a:b] → x[a..b].to_vec()
+                rustpython_parser::ast::Expr::Slice(slice) => {
+                    if slice.step.is_some() {
+                        return "/* unsupported slice step */".to_string();
+                    }
+                    let start = slice
+                        .lower
+                        .as_ref()
+                        .map(expr_to_rust)
+                        .unwrap_or_else(|| "0".to_string());
+                    let end = slice
+                        .upper
+                        .as_ref()
+                        .map(expr_to_rust)
+                        .unwrap_or_else(|| format!("{}.len()", value));
+                    format!("{}[{}..{}].to_vec()", value, start, end)
+                }
+                other => {
+                    let index = expr_to_rust(other);
+                    format!("{}[{}]", value, index)
+                }
+            }
         }
         Expr::Attribute(attr) => {
             format!("{}.{}", expr_to_rust(&attr.value), attr.attr)

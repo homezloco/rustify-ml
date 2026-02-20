@@ -104,12 +104,10 @@ CLI args (Clap)
 ### Task 8 (MEDIUM): rustify-stdlib packaging
 - [x] Add `rustify-stdlib/` crate to workspace and maturin config
 - [x] Add Python usage example (maturin develop) and parity tests at crate level
-- [ ] Publish/push once wired; share import snippet
+- [x] Publish/push once wired; share import snippet
 
 ### Remaining Priority List (short)
-1) Publish/push rustify-stdlib and document import snippet.
-2) Capture/retain clean generated crate snapshot (avoid fallback artifacts) for demos.
-3) Optional: add more CLI demos (matrix_ops/image_preprocess) if desired.
+All major tasks complete. Follow-ups: tag if desired, keep README/GIF in sync.
 
 ---
 

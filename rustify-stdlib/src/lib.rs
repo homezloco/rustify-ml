@@ -1,6 +1,6 @@
 #![allow(unsafe_op_in_unsafe_fn)]
-use pyo3::prelude::Bound;
 use pyo3::exceptions::PyValueError;
+use pyo3::prelude::Bound;
 use pyo3::prelude::*;
 
 #[pyfunction]

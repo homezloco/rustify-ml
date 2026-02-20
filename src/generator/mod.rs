@@ -350,6 +350,27 @@ def euclidean(p1, p2):
     }
 
     #[test]
+    fn test_translate_argmax_tuple_return() {
+        // returns (index, value) tuple
+        let code = "def argmax(xs):\n    best_idx = 0\n    best_val = xs[0]\n    for i in range(len(xs)):\n        if xs[i] > best_val:\n            best_val = xs[i]\n            best_idx = i\n    return (best_idx, best_val)\n";
+        let suite = Suite::parse(code, "<test>").expect("parse");
+        let target = TargetSpec {
+            func: "argmax".to_string(),
+            line: 1,
+            percent: 100.0,
+            reason: "argmax tuple".to_string(),
+        };
+        let t = translate_function_body(&target, suite.as_slice()).expect("no translation");
+        assert_eq!(t.return_type, "(usize, f64)");
+        assert!(
+            t.body.contains("return Ok((best_idx, best_val));"),
+            "body: {}",
+            t.body
+        );
+        assert!(!t.fallback);
+    }
+
+    #[test]
     fn test_translate_nested_for_else_triggers_fallback() {
         // for..else is unsupported; expect fallback
         let code = "def f(n):\n    total = 0\n    for i in range(n):\n        for j in range(n):\n            total += i + j\n    else:\n        total += 1\n    return total\n";
