@@ -162,7 +162,7 @@ fn main() -> Result<()> {
             } else {
                 let profile =
                     profiler::profile_input_with_iterations(&source, threshold, iterations)?;
-                analyzer::select_targets(&profile, threshold, ml_mode)
+                analyzer::select_targets(&profile, &source, threshold, ml_mode)
             };
 
             let generation = if ml_mode {

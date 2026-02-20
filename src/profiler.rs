@@ -139,11 +139,18 @@ fn parse_hotspots(stdout: &str, threshold: f32) -> Vec<Hotspot> {
                 continue;
             }
             let mut parts = rest.rsplitn(2, ':');
-            if let (Some(line_part), Some(func_part)) = (parts.next(), parts.next())
+            if let (Some(line_part), Some(func_and_path)) = (parts.next(), parts.next())
                 && let Ok(line_no) = line_part.parse::<u32>()
             {
+                let func_only = func_and_path
+                    .split_whitespace()
+                    .next()
+                    .unwrap_or(func_and_path)
+                    .trim()
+                    .to_string();
+
                 hotspots.push(Hotspot {
-                    func: func_part.trim().to_string(),
+                    func: func_only,
                     line: line_no,
                     percent,
                 });

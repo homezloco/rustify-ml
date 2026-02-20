@@ -87,12 +87,12 @@ pub fn expr_to_rust(expr: &Expr) -> String {
                     }
                     let start = slice
                         .lower
-                        .as_ref()
+                        .as_deref()
                         .map(expr_to_rust)
                         .unwrap_or_else(|| "0".to_string());
                     let end = slice
                         .upper
-                        .as_ref()
+                        .as_deref()
                         .map(expr_to_rust)
                         .unwrap_or_else(|| format!("{}.len()", value));
                     format!("{}[{}..{}].to_vec()", value, start, end)

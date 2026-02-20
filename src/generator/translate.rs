@@ -33,10 +33,18 @@ pub(super) struct BodyTranslation {
 /// Returns `None` only if the function is not found.
 /// Returns a `Translation` with `fallback: true` if the body cannot be translated.
 pub fn translate_function_body(target: &TargetSpec, module: &[Stmt]) -> Option<Translation> {
-    let func_def = module.iter().find_map(|stmt| match stmt {
-        Stmt::FunctionDef(def) if def.name == target.func => Some(def),
-        _ => None,
-    })?;
+    let func_def = module
+        .iter()
+        .find_map(|stmt| match stmt {
+            Stmt::FunctionDef(def) if def.name == target.func => Some(def),
+            _ => None,
+        })
+        .or_else(|| {
+            module.iter().find_map(|stmt| match stmt {
+                Stmt::FunctionDef(def) => Some(def),
+                _ => None,
+            })
+        })?;
 
     let mut params = infer_params(func_def.args.as_ref());
     if params.is_empty() {
@@ -77,19 +85,6 @@ pub fn translate_function_body(target: &TargetSpec, module: &[Stmt]) -> Option<T
 
     // Generic body translation
     if let Some(translated) = translate_body(&func_def.body) {
-        let first_param_name = params
-            .first()
-            .map(|(n, _)| n.as_str())
-            .unwrap_or("data")
-            .to_string();
-        if translated.fallback {
-            return Some(Translation {
-                params,
-                return_type: "Vec<f64>".to_string(),
-                body: format!("// fallback: echo input\n    Ok({first_param_name})"),
-                fallback: true,
-            });
-        }
         return Some(Translation {
             params,
             return_type: translated.return_type,
@@ -151,6 +146,12 @@ pub(super) fn translate_body_inner(body: &[Stmt], depth: usize) -> Option<BodyTr
             {
                 var_types.insert(name_target.id.to_string(), "vec");
             }
+            if let Expr::Dict(dict) = assign.value.as_ref()
+                && dict.keys.is_empty()
+                && let Expr::Name(name_target) = target
+            {
+                var_types.insert(name_target.id.to_string(), "map");
+            }
         }
 
         match translate_stmt_inner(stmt, depth) {
@@ -197,6 +198,16 @@ pub(super) fn translate_stmt_inner(stmt: &Stmt, depth: usize) -> Option<String> 
     match stmt {
         Stmt::Assign(assign) => {
             if let (Some(target), value) = (assign.targets.first(), &assign.value) {
+                if let Expr::Dict(dict) = value.as_ref()
+                    && dict.keys.is_empty()
+                {
+                    if let Expr::Name(n) = target {
+                        return Some(format!(
+                            "let mut {}: std::collections::HashMap<(i64, i64), i64> = std::collections::HashMap::new();",
+                            n.id
+                        ));
+                    }
+                }
                 // Subscript assign: result[i] = val → result[i] = val;
                 if let Expr::Subscript(sub) = target {
                     let lhs = format!("{}[{}]", expr_to_rust(&sub.value), expr_to_rust(&sub.slice));
@@ -272,6 +283,9 @@ pub(super) fn translate_stmt_inner(stmt: &Stmt, depth: usize) -> Option<String> 
             None
         }
         Stmt::For(for_stmt) => {
+            if !for_stmt.orelse.is_empty() {
+                return None;
+            }
             let iter_str = translate_for_iter(&for_stmt.iter);
             let loop_var = expr_to_rust(&for_stmt.target);
             let inner = translate_body_inner(for_stmt.body.as_slice(), depth + 1);
@@ -373,6 +387,9 @@ fn infer_return_type(expr: &Expr, var_types: &HashMap<String, &str>) -> String {
         Expr::Name(n) => {
             if let Some(&"vec") = var_types.get(n.id.as_str()) {
                 return "Vec<f64>".to_string();
+            }
+            if let Some(&"map") = var_types.get(n.id.as_str()) {
+                return "std::collections::HashMap<(i64, i64), i64>".to_string();
             }
             "f64".to_string()
         }

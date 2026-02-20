@@ -1,9 +1,16 @@
+use rustpython_parser::ast::{Stmt, Suite};
+use rustpython_parser::Parse;
 use tracing::info;
 
-use crate::utils::{ProfileSummary, TargetSpec};
+use crate::utils::{extract_code, InputSource, ProfileSummary, TargetSpec};
 
 /// Select target functions to generate based on hotspot percentages and ML mode heuristics (placeholder heuristics).
-pub fn select_targets(profile: &ProfileSummary, threshold: f32, ml_mode: bool) -> Vec<TargetSpec> {
+pub fn select_targets(
+    profile: &ProfileSummary,
+    source: &InputSource,
+    threshold: f32,
+    ml_mode: bool,
+) -> Vec<TargetSpec> {
     let mut targets = Vec::new();
     for hs in &profile.hotspots {
         if hs.percent < threshold {
@@ -21,6 +28,29 @@ pub fn select_targets(profile: &ProfileSummary, threshold: f32, ml_mode: bool) -
             reason,
         });
     }
+
+    if threshold <= 0.0 {
+        if let Ok(code) = extract_code(source) {
+            if let Ok(suite) = Suite::parse(&code, "<input>") {
+                for stmt in suite.iter() {
+                    if let Stmt::FunctionDef(func_def) = stmt {
+                        let name = func_def.name.to_string();
+                        if targets.iter().any(|t| t.func == name) {
+                            continue;
+                        }
+                        // Source line is optional here; default to 1 if unavailable.
+                        targets.push(TargetSpec {
+                            func: name,
+                            line: 1,
+                            percent: 0.0,
+                            reason: "threshold<=0: include all defs".to_string(),
+                        });
+                    }
+                }
+            }
+        }
+    }
+
     info!(count = targets.len(), "selected targets for generation");
     targets
 }

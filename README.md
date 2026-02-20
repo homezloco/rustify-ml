@@ -61,6 +61,7 @@ Input (one required):
 
 Profiler:
   --threshold <FLOAT>    Minimum hotspot % to target [default: 10.0]
+                        Tip: set to 0.0 to include all defined functions (parsed from the source)
   --iterations <N>       Profiler loop count for better sampling [default: 100]
   --list-targets         Profile only: print hotspot table and exit (no codegen)
   --function <NAME>      Skip profiler, target a specific function by name
@@ -83,6 +84,7 @@ Logging:
 | `--function <name>` | Skip profiler entirely, target one function by name (100% weight) |
 | `--iterations <n>` | Control how many times the profiler loops the script (default: 100) |
 | `--ml-mode` | Detect numpy imports → use `PyReadonlyArray1<f64>` + add numpy dep to Cargo.toml |
+| `--threshold 0` | Force inclusion of all defined functions (parser-based), even if profiler reports 0% |
 
 ### BPE Tokenizer Demo
 
