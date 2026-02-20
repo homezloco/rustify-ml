@@ -49,7 +49,7 @@ pub fn render_function_with_options(
                 ("p2".to_string(), "Vec<f64>".to_string()),
             ];
             translation.return_type = "f64".to_string();
-            translation.body = "let mut total: f64 = 0.0;\n    for i in 0..p1.len() {\n        let diff = p1[i] - p2[i];\n        total += diff * diff;\n    }\n    Ok(total.sqrt())".to_string();
+            translation.body = "let mut total: f64 = 0.0;\n    for i in 0..p1.len() {\n        let diff = p1[i] - p2[i];\n        total += diff * diff;\n    }\n    Ok(total.powf(0.5))".to_string();
             translation.fallback = false;
         }
         "dot_product" => {
