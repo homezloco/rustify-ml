@@ -200,4 +200,4 @@ cargo test
 
 ---
 
-*Updated 2026-02-19 — cargo fmt && cargo check passes; cargo test passes after PyO3/libpython3.12 link fix; translation coverage expanded; README/stdlib README updated*
+*Updated 2026-02-20 — cargo fmt && cargo check passes; cargo test passes; rustify-ml v0.1.1 published; translation coverage expanded (list comp, numpy hints); README/stdlib README updated*
