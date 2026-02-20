@@ -200,13 +200,12 @@ pub(super) fn translate_stmt_inner(stmt: &Stmt, depth: usize) -> Option<String> 
             if let (Some(target), value) = (assign.targets.first(), &assign.value) {
                 if let Expr::Dict(dict) = value.as_ref()
                     && dict.keys.is_empty()
+                    && let Expr::Name(n) = target
                 {
-                    if let Expr::Name(n) = target {
-                        return Some(format!(
-                            "let mut {}: std::collections::HashMap<(i64, i64), i64> = std::collections::HashMap::new();",
-                            n.id
-                        ));
-                    }
+                    return Some(format!(
+                        "let mut {}: std::collections::HashMap<(i64, i64), i64> = std::collections::HashMap::new();",
+                        n.id
+                    ));
                 }
                 // Subscript assign: result[i] = val → result[i] = val;
                 if let Expr::Subscript(sub) = target {

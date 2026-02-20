@@ -29,24 +29,23 @@ pub fn select_targets(
         });
     }
 
-    if threshold <= 0.0 {
-        if let Ok(code) = extract_code(source) {
-            if let Ok(suite) = Suite::parse(&code, "<input>") {
-                for stmt in suite.iter() {
-                    if let Stmt::FunctionDef(func_def) = stmt {
-                        let name = func_def.name.to_string();
-                        if targets.iter().any(|t| t.func == name) {
-                            continue;
-                        }
-                        // Source line is optional here; default to 1 if unavailable.
-                        targets.push(TargetSpec {
-                            func: name,
-                            line: 1,
-                            percent: 0.0,
-                            reason: "threshold<=0: include all defs".to_string(),
-                        });
-                    }
+    if threshold <= 0.0
+        && let Ok(code) = extract_code(source)
+        && let Ok(suite) = Suite::parse(&code, "<input>")
+    {
+        for stmt in suite.iter() {
+            if let Stmt::FunctionDef(func_def) = stmt {
+                let name = func_def.name.to_string();
+                if targets.iter().any(|t| t.func == name) {
+                    continue;
                 }
+                // Source line is optional here; default to 1 if unavailable.
+                targets.push(TargetSpec {
+                    func: name,
+                    line: 1,
+                    percent: 0.0,
+                    reason: "threshold<=0: include all defs".to_string(),
+                });
             }
         }
     }
