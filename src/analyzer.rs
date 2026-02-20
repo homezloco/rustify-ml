@@ -1,8 +1,8 @@
-use rustpython_parser::ast::{Stmt, Suite};
 use rustpython_parser::Parse;
+use rustpython_parser::ast::{Stmt, Suite};
 use tracing::info;
 
-use crate::utils::{extract_code, InputSource, ProfileSummary, TargetSpec};
+use crate::utils::{InputSource, ProfileSummary, TargetSpec, extract_code};
 
 /// Select target functions to generate based on hotspot percentages and ML mode heuristics (placeholder heuristics).
 pub fn select_targets(

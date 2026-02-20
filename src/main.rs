@@ -149,7 +149,8 @@ fn main() -> Result<()> {
 
             // --profile-only: run profiler with iterations, print hotspots, exit
             if profile_only {
-                let profile = profiler::profile_input_with_iterations(&source, threshold, iterations)?;
+                let profile =
+                    profiler::profile_input_with_iterations(&source, threshold, iterations)?;
                 utils::print_hotspot_table(&profile.hotspots);
                 info!(input_kind, iterations, "profile-only completed");
                 return Ok(());
@@ -174,7 +175,10 @@ fn main() -> Result<()> {
             let generation = if no_regen {
                 let crate_dir = output.join("rustify_ml_ext");
                 if !crate_dir.exists() {
-                    anyhow::bail!("--no-regen: generated crate not found at {}", crate_dir.display());
+                    anyhow::bail!(
+                        "--no-regen: generated crate not found at {}",
+                        crate_dir.display()
+                    );
                 }
                 info!(path = %crate_dir.display(), "--no-regen: skipping generation, using existing crate");
                 utils::GenerationResult {
