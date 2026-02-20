@@ -4,7 +4,7 @@
 
 ---
 
-## 1. Current State Snapshot (Updated 2026-02-18)
+## 1. Current State Snapshot (Updated 2026-02-19)
 
 | File | Status | Notes |
 |------|--------|-------|
@@ -28,7 +28,7 @@
 | README.md | ✅ Done | Full docs: usage, CLI ref, translation table, architecture, roadmap |
 | plan.md | ✅ Done | This file |
 
-**Build status:** `cargo fmt && cargo check` passes (verified in WSL 2026-02-18)
+**Build status:** `cargo fmt && cargo check` passes (verified in WSL 2026-02-19). `cargo test` passes after PyO3/libpython3.12 linking fix (build.rs + env vars).
 
 ---
 
@@ -107,7 +107,7 @@ CLI args (Clap)
 - [x] Publish/push once wired; share import snippet
 
 ### Remaining Priority List (short)
-All major tasks complete. Follow-ups: tag if desired, keep README/GIF in sync.
+All major tasks complete. Follow-ups: optional tag/publish updates; keep README/GIF in sync; retain PyO3 link env notes for future Python upgrades.
 
 ---
 
@@ -123,7 +123,7 @@ All major tasks complete. Follow-ups: tag if desired, keep README/GIF in sync.
 | `result[i] = val` | `result[i] = val;` | ✅ Done |
 | `result = [0.0] * n` | `let mut result = vec![0.0f64; n];` | ✅ Done |
 | `range(a, b)` | `a..b` | ✅ Done |
-| `for i in range(n): for j...` | nested for loops | 🔄 In Progress |
+| `for i in range(n): for j...` | nested for loops | ✅ Done |
 | `[f(x) for x in xs]` | `xs.iter().map(f).collect()` | 📋 Planned |
 | `np.array` params | `Array1<f64>` | 📋 Planned (numpy-hint feature) |
 
@@ -197,4 +197,4 @@ cargo test
 
 ---
 
-*Updated 2026-02-18 — cargo fmt && cargo check passes; translation coverage expanded; cargo check on generated crate; README fully updated*
+*Updated 2026-02-19 — cargo fmt && cargo check passes; cargo test passes after PyO3/libpython3.12 link fix; translation coverage expanded; README/stdlib README updated*
