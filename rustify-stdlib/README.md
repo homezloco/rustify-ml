@@ -35,3 +35,21 @@ PY
 cargo test
 cargo bench --bench speed -- --quick
 ```
+
+## PyO3 linking (Linux)
+
+If you hit missing Python symbols at link time, ensure the build knows where `libpython` lives. The crate ships a `build.rs` that reads the following environment variables and sets `-L`, `-l`, and an rpath:
+
+```bash
+# common defaults used during debugging
+export PYO3_PYTHON=/usr/bin/python3.12
+export PYO3_CONFIG_FILE=/mnt/d/WindsurfProjects/rustify/rustify-ml/pyo3.cfg
+export PYO3_NO_PKG_CONFIG=1
+export PYO3_LIB_DIR=/usr/lib/x86_64-linux-gnu
+export PYO3_LIB_NAME=python3.12
+export LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu
+
+cargo test -vv
+```
+
+Customize `PYO3_LIB_DIR` and `PYO3_LIB_NAME` if your Python install differs (e.g., `/opt/python/3.10/lib` and `python3.10`). The rpath is emitted automatically so the test binary can locate `libpython` at runtime.
